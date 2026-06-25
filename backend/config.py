@@ -35,9 +35,15 @@ else:
         "http://localhost:3000",
     ]
 
-DATABASE_URL = os.getenv("DATABASE_URL", "sqlite+aiosqlite:///./talent_pool.db")
-if DATABASE_URL.startswith("postgresql://"):
-    DATABASE_URL = DATABASE_URL.replace("postgresql://", "postgresql+asyncpg://", 1)
+_raw_db = os.getenv("DATABASE_URL", "").strip()
+if _raw_db and _raw_db.startswith("postgresql://"):
+    DATABASE_URL = _raw_db.replace("postgresql://", "postgresql+asyncpg://", 1)
+elif _raw_db and _raw_db.startswith("postgres://"):
+    DATABASE_URL = _raw_db.replace("postgres://", "postgresql+asyncpg://", 1)
+elif _raw_db:
+    DATABASE_URL = _raw_db
+else:
+    DATABASE_URL = "sqlite+aiosqlite:///./talent_pool.db"
 PORT = int(os.getenv("PORT", "8000"))
 TALENT_POOL_ROOT = os.getenv("TALENT_POOL_ROOT", "./talent-pool")
 SENTRY_DSN = os.getenv("SENTRY_DSN", "")
