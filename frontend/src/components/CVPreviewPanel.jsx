@@ -1,7 +1,38 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
+import axios from 'axios'
 
 function CVPreviewPanel({ candidateId, resumeFilename }) {
   const [showCV, setShowCV] = useState(true)
+  const [pdfUrl, setPdfUrl] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
+
+  useEffect(() => {
+    if (!candidateId) return
+    let blobUrl = null
+
+    const fetchPdf = async () => {
+      try {
+        setLoading(true)
+        const base = import.meta.env.PROD ? '' : '/api'
+        const resp = await axios.get(`${base}/cv/${candidateId}`, {
+          responseType: 'blob',
+        })
+        blobUrl = URL.createObjectURL(resp.data)
+        setPdfUrl(blobUrl)
+      } catch (err) {
+        setError('Failed to load CV preview')
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    fetchPdf()
+
+    return () => {
+      if (blobUrl) URL.revokeObjectURL(blobUrl)
+    }
+  }, [candidateId])
 
   if (!candidateId) {
     return (
@@ -10,8 +41,6 @@ function CVPreviewPanel({ candidateId, resumeFilename }) {
       </div>
     )
   }
-
-  const cvUrl = `/analysis/${candidateId}/pdf`
 
   return (
     <div className="cv-preview-container">
@@ -27,11 +56,15 @@ function CVPreviewPanel({ candidateId, resumeFilename }) {
 
       {showCV && (
         <div className="cv-document-wrapper">
-          <iframe
-            src={cvUrl}
-            className="cv-iframe"
-            title="CV Preview"
-          />
+          {loading && <div className="cv-preview-empty"><p>Loading PDF...</p></div>}
+          {error && <div className="cv-preview-empty"><p>{error}</p></div>}
+          {pdfUrl && (
+            <iframe
+              src={pdfUrl}
+              className="cv-iframe"
+              title="CV Preview"
+            />
+          )}
         </div>
       )}
     </div>

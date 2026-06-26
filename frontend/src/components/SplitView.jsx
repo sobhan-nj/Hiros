@@ -29,13 +29,6 @@ function SplitView({ results, onReset }) {
   return (
     <div className="split-view">
       <div className="split-content">
-        <div className="cv-preview-panel">
-          <CVPreviewPanel
-            candidateId={id}
-            resumeFilename={analysis.resume_filename}
-          />
-        </div>
-
         <div className="analysis-panel">
           <div className="analysis-top-bar">
             <div className="candidate-info">
@@ -88,6 +81,13 @@ function SplitView({ results, onReset }) {
           <button className="btn-reset" onClick={onReset}>
             Analyze Another
           </button>
+        </div>
+
+        <div className="cv-preview-panel">
+          <CVPreviewPanel
+            candidateId={id}
+            resumeFilename={analysis.resume_filename}
+          />
         </div>
       </div>
     </div>
