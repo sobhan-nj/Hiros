@@ -1,14 +1,12 @@
 import json
 import hmac
 import re
-import uuid
-import asyncio
 import sentry_sdk
 from contextlib import asynccontextmanager
 from datetime import datetime
 from pathlib import Path
 
-from fastapi import FastAPI, Request, UploadFile, File, Form, Header, HTTPException, Depends, BackgroundTasks
+from fastapi import FastAPI, Request, UploadFile, File, Form, Header, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
@@ -17,7 +15,7 @@ from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 from sqlalchemy import select, text
-from sqlalchemy.extasyncio import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.utils.log import logger
 from backend import config
@@ -34,12 +32,10 @@ sentry_sdk.init(
 from backend.core.parser import parse_file
 from backend.core.analyzer import analyze_resume
 from backend.core.schema import DIMENSION_KEYS, DIMENSION_GROUPS
-from backend.db.database import init_db, get_session, engine, TalentPoolEntry, AsyncSessionLocal
+from backend.db.database import init_db, get_session, engine, TalentPoolEntry
 from backend.utils.file_storage import safe_save_to_folder
 
 limiter = Limiter(key_func=get_remote_address)
-
-_jobs: dict[str, dict] = {}
 
 
 @asynccontextmanager
@@ -147,11 +143,11 @@ def _extract_name_from_report(report_data: dict, resume_text: str, filename: str
 @limiter.limit("10/minute")
 async def analyze(
     request: Request,
-    background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
     seniority: str = Form("mid"),
     x_api_key: str = Header(None),
     x_turnstile_token: str = Header(None),
+    session: AsyncSession = Depends(get_session),
 ):
     if config.ANALYSIS_API_KEY and x_api_key != config.ANALYSIS_API_KEY:
         raise HTTPException(status_code=401, detail="Invalid API key")
@@ -169,57 +165,21 @@ async def analyze(
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-    job_id = str(uuid.uuid4())[:8]
-    _jobs[job_id] = {"status": "processing", "result": None, "error": None}
-
-    background_tasks.add_task(_run_analysis, job_id, file_bytes, file.filename, resume_text, raw_keywords, mime_type, seniority)
-
-    return JSONResponse(content={"job_id": job_id, "status": "processing"})
-
-
-async def _run_analysis(job_id: str, file_bytes: bytes, filename: str, resume_text: str, raw_keywords: list, mime_type: str, seniority: str):
     try:
         report = await analyze_resume(resume_text, raw_keywords, seniority)
+    except Exception as e:
+        logger.error(f"Analysis failed: {e}")
+        raise HTTPException(status_code=502, detail="LLM analysis failed. Please try again.")
 
-        sorted_dims = {k: report.dimensions[k] for k in DIMENSION_KEYS if k in report.dimensions}
+    sorted_dims = {k: report.dimensions[k] for k in DIMENSION_KEYS if k in report.dimensions}
 
-        dim_groups = {}
-        for group_key, group_info in DIMENSION_GROUPS.items():
-            group_dims = {}
-            for dk in group_info["keys"]:
-                if dk in sorted_dims:
-                    v = sorted_dims[dk]
-                    group_dims[dk] = {
-                        "code": v.code,
-                        "name": v.name,
-                        "priority_tier": v.priority_tier,
-                        "rating": v.rating,
-                        "confidence": v.confidence,
-                        "summary": v.summary,
-                        "issues": v.issues,
-                        "fixes": v.fixes,
-                        "highlight_targets": getattr(v, 'highlight_targets', []),
-                    }
-            dim_groups[group_key] = {
-                "icon": group_info["icon"],
-                "label": group_info["label"],
-                "dimensions": group_dims,
-            }
-
-        report_dict = {
-            "extraction_status": report.extraction_status,
-            "extraction_notes": report.extraction_notes,
-            "header": report.header,
-            "executive_summary": report.executive_summary,
-            "candidate_name": report.candidate_name,
-            "seniority_check": {
-                "status": report.seniority_check.status,
-                "detected_level": report.seniority_check.detected_level,
-                "reason": report.seniority_check.reason,
-            },
-            "dimension_groups": dim_groups,
-            "dimensions": {
-                k: {
+    dim_groups = {}
+    for group_key, group_info in DIMENSION_GROUPS.items():
+        group_dims = {}
+        for dk in group_info["keys"]:
+            if dk in sorted_dims:
+                v = sorted_dims[dk]
+                group_dims[dk] = {
                     "code": v.code,
                     "name": v.name,
                     "priority_tier": v.priority_tier,
@@ -230,63 +190,76 @@ async def _run_analysis(job_id: str, file_bytes: bytes, filename: str, resume_te
                     "fixes": v.fixes,
                     "highlight_targets": getattr(v, 'highlight_targets', []),
                 }
-                for k, v in sorted_dims.items()
-            },
-            "resume_text": resume_text,
-            "resume_filename": filename,
-            "rewrites": report.rewrites,
-            "priority_fixes": report.priority_fixes,
-            "tier": report.tier,
-            "verdict": report.verdict,
+        dim_groups[group_key] = {
+            "icon": group_info["icon"],
+            "label": group_info["label"],
+            "dimensions": group_dims,
         }
 
-        full_name = _extract_name_from_report(report_dict, resume_text, filename)
+    report_dict = {
+        "extraction_status": report.extraction_status,
+        "extraction_notes": report.extraction_notes,
+        "header": report.header,
+        "executive_summary": report.executive_summary,
+        "candidate_name": report.candidate_name,
+        "seniority_check": {
+            "status": report.seniority_check.status,
+            "detected_level": report.seniority_check.detected_level,
+            "reason": report.seniority_check.reason,
+        },
+        "dimension_groups": dim_groups,
+        "dimensions": {
+            k: {
+                "code": v.code,
+                "name": v.name,
+                "priority_tier": v.priority_tier,
+                "rating": v.rating,
+                "confidence": v.confidence,
+                "summary": v.summary,
+                "issues": v.issues,
+                "fixes": v.fixes,
+                "highlight_targets": getattr(v, 'highlight_targets', []),
+            }
+            for k, v in sorted_dims.items()
+        },
+        "resume_text": resume_text,
+        "resume_filename": file.filename,
+        "rewrites": report.rewrites,
+        "priority_fixes": report.priority_fixes,
+        "tier": report.tier,
+        "verdict": report.verdict,
+    }
 
-        folder_path = safe_save_to_folder(file_bytes, filename, full_name, seniority)
+    full_name = _extract_name_from_report(report_dict, resume_text, file.filename)
 
-        async with AsyncSessionLocal() as session:
-            entry = TalentPoolEntry(
-                full_name=full_name,
-                seniority_declared=seniority,
-                seniority_detected=report.seniority_check.detected_level,
-                seniority_match=report.seniority_check.status,
-                tier=report.tier,
-                original_filename=filename,
-                file_mimetype=mime_type,
-                file_blob=file_bytes,
-                folder_path=folder_path,
-                resume_text=resume_text,
-                analysis_json=json.dumps(report_dict),
-                priority_fixes_json=json.dumps(report.priority_fixes),
-                verdict=report.verdict,
-            )
-            session.add(entry)
-            await session.commit()
-            await session.refresh(entry)
+    folder_path = safe_save_to_folder(
+        file_bytes, file.filename, full_name, seniority
+    )
 
-        logger.info(f"Saved candidate #{entry.id}: {full_name} ({seniority})")
+    entry = TalentPoolEntry(
+        full_name=full_name,
+        seniority_declared=seniority,
+        seniority_detected=report.seniority_check.detected_level,
+        seniority_match=report.seniority_check.status,
+        tier=report.tier,
+        original_filename=file.filename,
+        file_mimetype=mime_type,
+        file_blob=file_bytes,
+        folder_path=folder_path,
+        resume_text=resume_text,
+        analysis_json=json.dumps(report_dict),
+        priority_fixes_json=json.dumps(report.priority_fixes),
+        verdict=report.verdict,
+    )
+    session.add(entry)
+    await session.commit()
+    await session.refresh(entry)
 
-        _jobs[job_id] = {
-            "status": "done",
-            "result": {"id": entry.id, "analysis": report_dict},
-            "error": None,
-        }
+    logger.info(f"Saved candidate #{entry.id}: {full_name} ({seniority})")
 
-    except Exception as e:
-        logger.error(f"Analysis failed for job {job_id}: {e}")
-        _jobs[job_id] = {"status": "error", "result": None, "error": "LLM analysis failed. Please try again."}
-
-
-@app.get("/analyze/{job_id}")
-async def get_job_status(job_id: str):
-    job = _jobs.get(job_id)
-    if not job:
-        raise HTTPException(status_code=404, detail="Job not found")
     return JSONResponse(content={
-        "job_id": job_id,
-        "status": job["status"],
-        "result": job["result"],
-        "error": job["error"],
+        "id": entry.id,
+        "analysis": report_dict,
     })
 
 

@@ -1,43 +1,12 @@
-import React, { useState, useEffect } from 'react'
-import axios from 'axios'
+import React, { useState } from 'react'
 
-function CVPreviewPanel({ candidateId, resumeFilename }) {
-  const [showCV, setShowCV] = useState(true)
-  const [pdfUrl, setPdfUrl] = useState(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState(null)
+function CVPreviewPanel({ resumeText, resumeFilename }) {
+  const [showText, setShowText] = useState(true)
 
-  useEffect(() => {
-    if (!candidateId) return
-    let blobUrl = null
-
-    const fetchPdf = async () => {
-      try {
-        setLoading(true)
-        const base = import.meta.env.PROD ? '' : '/api'
-        const resp = await axios.get(`${base}/cv/${candidateId}`, {
-          responseType: 'blob',
-        })
-        blobUrl = URL.createObjectURL(resp.data)
-        setPdfUrl(blobUrl)
-      } catch (err) {
-        setError('Failed to load CV preview')
-      } finally {
-        setLoading(false)
-      }
-    }
-
-    fetchPdf()
-
-    return () => {
-      if (blobUrl) URL.revokeObjectURL(blobUrl)
-    }
-  }, [candidateId])
-
-  if (!candidateId) {
+  if (!resumeText) {
     return (
       <div className="cv-preview-empty">
-        <p>No CV data available</p>
+        <p>No resume text available</p>
       </div>
     )
   }
@@ -48,23 +17,15 @@ function CVPreviewPanel({ candidateId, resumeFilename }) {
         <span className="cv-filename">{resumeFilename || 'Resume'}</span>
         <button
           className="cv-toggle"
-          onClick={() => setShowCV(!showCV)}
+          onClick={() => setShowText(!showText)}
         >
-          {showCV ? 'Hide CV' : 'Show CV'}
+          {showText ? 'Hide Text' : 'Show Text'}
         </button>
       </div>
 
-      {showCV && (
-        <div className="cv-document-wrapper">
-          {loading && <div className="cv-preview-empty"><p>Loading PDF...</p></div>}
-          {error && <div className="cv-preview-empty"><p>{error}</p></div>}
-          {pdfUrl && (
-            <iframe
-              src={pdfUrl}
-              className="cv-iframe"
-              title="CV Preview"
-            />
-          )}
+      {showText && (
+        <div className="cv-text-wrapper">
+          <pre className="cv-text-content">{resumeText}</pre>
         </div>
       )}
     </div>

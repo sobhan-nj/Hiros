@@ -85,7 +85,7 @@ function SplitView({ results, onReset }) {
 
         <div className="cv-preview-panel">
           <CVPreviewPanel
-            candidateId={id}
+            resumeText={analysis.resume_text}
             resumeFilename={analysis.resume_filename}
           />
         </div>

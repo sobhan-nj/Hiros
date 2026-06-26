@@ -11,13 +11,8 @@ export const analyzeResume = async (formData, turnstileToken) => {
   if (turnstileToken) headers['x-turnstile-token'] = turnstileToken
   const response = await api.post('/analyze', formData, {
     headers,
-    timeout: 30000,
+    timeout: 300000,
   })
-  return response.data
-}
-
-export const getJobStatus = async (jobId) => {
-  const response = await api.get(`/analyze/${jobId}`, { timeout: 10000 })
   return response.data
 }
 
