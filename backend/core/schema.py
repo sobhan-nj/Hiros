@@ -63,54 +63,6 @@ DIMENSION_KEYS = [
     "bullet_length_formatting_consistency",
 ]
 
-DIMENSION_LABELS = {
-    "page_structure": "Page Structure",
-    "visual_design_scannability": "Visual Design & Scannability",
-    "ats_compatibility": "ATS Compatibility",
-    "section_order": "Section Order",
-    "formalities": "Formalities",
-    "professional_network": "Professional Network",
-    "professional_summary": "Professional Summary",
-    "bullet_quality_ownership": "Bullet Quality & Ownership",
-    "impact_so_what": 'Impact / "So What?"',
-    "specialty_fit_rotation_relevance": "Specialty Fit & Rotation Relevance",
-    "keyword_density": "Keyword Density",
-    "relevance_recency": "Relevance & Recency",
-    "soft_skills_integration": "Soft Skills Integration",
-    "grammar_spelling_consistency": "Grammar, Spelling & Consistency",
-    "additional_context": "Additional Context",
-    "legal_eligibility_status": "Legal & Eligibility Status",
-    "gaps_risk_signals": "Gaps & Risk Signals",
-    "pii_sensitive_data": "PII & Sensitive Data",
-    "white_space": "White Space",
-    "fluff_buzzwords": "Fluff & Buzzwords",
-    "bullet_length_formatting_consistency": "Bullet Length & Formatting Consistency",
-}
-
-DIMENSION_PRIORITY = {
-    "page_structure": "P1",
-    "visual_design_scannability": "P2",
-    "ats_compatibility": "P1",
-    "section_order": "P1",
-    "formalities": "P2",
-    "professional_network": "P2",
-    "professional_summary": "P2",
-    "bullet_quality_ownership": "P1",
-    "impact_so_what": "P1",
-    "specialty_fit_rotation_relevance": "P1",
-    "keyword_density": "P1",
-    "relevance_recency": "P3",
-    "soft_skills_integration": "P3",
-    "grammar_spelling_consistency": "P1",
-    "additional_context": "P3",
-    "legal_eligibility_status": "P1",
-    "gaps_risk_signals": "P1",
-    "pii_sensitive_data": "P2",
-    "white_space": "P2",
-    "fluff_buzzwords": "P2",
-    "bullet_length_formatting_consistency": "P2",
-}
-
 DIMENSION_GROUPS = {
     "layout": {
         "icon": "📐",

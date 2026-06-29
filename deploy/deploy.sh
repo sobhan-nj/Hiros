@@ -2,8 +2,9 @@
 # ===========================================
 # Resume Analyzer — Deploy/Update Script
 # ===========================================
-# Run after initial setup to pull new code and restart.
+# Run as root after initial setup to pull new code and restart.
 # Safe to run repeatedly (idempotent).
+# Usage: sudo ./deploy/deploy.sh
 
 set -euo pipefail
 
@@ -17,7 +18,17 @@ echo "=========================================="
 # --- Pull latest code ---
 echo "[1/4] Pulling latest code..."
 cd "$APP_DIR"
-sudo -u "$DEPLOY_USER" git pull --ff-only
+# Stash any local modifications so pull doesn't fail
+sudo -u "$DEPLOY_USER" git stash --quiet 2>/dev/null || true
+sudo -u "$DEPLOY_USER" git pull --ff-only || {
+    echo "  WARNING: git pull failed. Trying git pull --rebase..."
+    sudo -u "$DEPLOY_USER" git pull --rebase || {
+        echo "  ERROR: git pull failed. Check for conflicts."
+        exit 1
+    }
+}
+# Restore stashed changes if any
+sudo -u "$DEPLOY_USER" git stash pop --quiet 2>/dev/null || true
 
 # --- Check if requirements changed ---
 echo "[2/4] Checking Python dependencies..."
@@ -45,7 +56,7 @@ echo "  Frontend built"
 
 # --- Restart backend ---
 echo "[4/4] Restarting backend service..."
-systemctl restart resume-analyzer
+sudo systemctl restart resume-analyzer
 sleep 2
 
 if systemctl is-active --quiet resume-analyzer; then

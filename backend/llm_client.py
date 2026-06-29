@@ -65,7 +65,7 @@ async def _call_gemini(system_prompt: str, user_message: str, max_tokens: int) -
             temperature=0.2,
         ),
     )
-    return response.text
+    return response.text or ""
 
 
 async def _call_gemini_structured(system_prompt: str, user_message: str, response_model, max_tokens: int):
@@ -133,7 +133,10 @@ async def _call_openai_structured(system_prompt: str, user_message: str, respons
         max_tokens=max_tokens,
         temperature=0.2,
     )
-    return completion.choices[0].message.parsed
+    parsed = completion.choices[0].message.parsed
+    if parsed is None:
+        raise ValueError("LLM response could not be parsed into the expected schema")
+    return parsed
 
 
 async def _call_anthropic(system_prompt: str, user_message: str, max_tokens: int) -> str:

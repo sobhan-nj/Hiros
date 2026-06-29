@@ -2,10 +2,9 @@
 # ===========================================
 # Resume Analyzer — One-time server setup
 # ===========================================
-# Run as root on a fresh Ubuntu 24.04 server:
-#   curl -sL https://raw.githubusercontent.com/you/repo/main/deploy/setup.sh | bash
-# Or copy to server and run:
-#   chmod +x setup.sh && sudo ./setup.sh
+# Compatible with Ubuntu 22.04 / 24.04
+# Run as root:
+#   chmod +x setup.sh && sudo ./setup.sh hiros.online https://github.com/Sobhan-nj/Hiro.git
 
 set -euo pipefail
 
@@ -26,7 +25,7 @@ fi
 
 if [[ -z "$DOMAIN" ]]; then
     echo "Usage: sudo ./setup.sh <your-domain.com> [git-repo-url]"
-    echo "Example: sudo ./setup.sh resume-analyzer.com https://github.com/you/resume-analyzer.git"
+    echo "Example: sudo ./setup.sh hiros.online https://github.com/Sobhan-nj/Hiro.git"
     exit 1
 fi
 
@@ -38,10 +37,21 @@ echo ""
 # --- 1. System packages ---
 echo "[1/9] Installing system packages..."
 apt-get update -qq
+
+# Python 3.12 — Ubuntu 22.04 ships 3.10, need deadsnakes PPA
+if ! command -v python3.12 &> /dev/null; then
+    echo "  Installing Python 3.12 via deadsnakes PPA..."
+    apt-get install -y -qq software-properties-common > /dev/null 2>&1
+    add-apt-repository -y ppa:deadsnakes/ppa > /dev/null 2>&1
+    apt-get update -qq
+    apt-get install -y -qq python3.12 python3.12-venv python3.12-dev > /dev/null 2>&1
+fi
+
 apt-get install -y -qq \
-    python3.12 python3.12-venv python3-pip \
+    python3-pip \
     nginx certbot python3-certbot-nginx \
     git curl ufw \
+    fonts-dejavu-core \
     > /dev/null 2>&1
 
 # Node.js 20 (for frontend build)
@@ -136,24 +146,52 @@ fi
 
 # --- 9. Nginx ---
 echo "[9/9] Configuring Nginx..."
-if [[ -f "$APP_DIR/deploy/nginx.conf" ]]; then
-    # Replace placeholder domain with actual domain
-    sed "s/your-domain.com/$DOMAIN/g" "$APP_DIR/deploy/nginx.conf" > /etc/nginx/sites-available/resume-analyzer
-    ln -sf /etc/nginx/sites-available/resume-analyzer /etc/nginx/sites-enabled/resume-analyzer
+# Start with HTTP-only config (SSL certs don't exist yet — Certbot adds them later)
+cat > /etc/nginx/sites-available/resume-analyzer <<NGINX_HTTP
+server {
+    listen 80;
+    server_name $DOMAIN www.$DOMAIN;
 
-    # Remove default site
-    rm -f /etc/nginx/sites-enabled/default
+    client_max_body_size 10M;
 
-    # Test nginx config
-    if nginx -t 2>&1 | grep -q "successful"; then
-        systemctl reload nginx
-        echo "  Nginx configured and reloaded"
-    else
-        echo "  ERROR: Nginx config test failed. Check /etc/nginx/sites-available/resume-analyzer"
-        nginx -t
-    fi
+    location ~ ^/(analyze|health|admin|analysis|cv)(/|\$) {
+        limit_req zone=api_limit burst=20 nodelay;
+        proxy_pass http://127.0.0.1:8000;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_read_timeout 120s;
+        proxy_send_timeout 120s;
+    }
+
+    location / {
+        root /opt/resume-analyzer/frontend/dist;
+        try_files \$uri \$uri/ /index.html;
+    }
+
+    location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2|ttf|eot)\$ {
+        root /opt/resume-analyzer/frontend/dist;
+        expires 30d;
+        add_header Cache-Control "public, immutable";
+    }
+}
+NGINX_HTTP
+
+ln -sf /etc/nginx/sites-available/resume-analyzer /etc/nginx/sites-enabled/resume-analyzer
+rm -f /etc/nginx/sites-enabled/default
+
+# Add rate limiting zone before server blocks
+if ! grep -q "limit_req_zone" /etc/nginx/nginx.conf; then
+    sed -i '/http {/a \    limit_req_zone $binary_remote_addr zone=api_limit:10m rate=10r/s;' /etc/nginx/nginx.conf
+fi
+
+if nginx -t 2>&1 | grep -q "successful"; then
+    systemctl reload nginx
+    echo "  Nginx configured (HTTP only — run certbot next to add HTTPS)"
 else
-    echo "  WARNING: nginx.conf not found in deploy/"
+    echo "  ERROR: Nginx config test failed"
+    nginx -t
 fi
 
 # --- Firewall ---

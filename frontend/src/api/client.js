@@ -16,13 +16,6 @@ export const analyzeResume = async (formData, turnstileToken) => {
   return response.data
 }
 
-export const adminLogin = async (key) => {
-  const response = await api.get('/admin/candidates', {
-    headers: { 'x-admin-key': key },
-  })
-  return response.data
-}
-
 export const getCandidates = async (key) => {
   const response = await api.get('/admin/candidates', {
     headers: { 'x-admin-key': key },

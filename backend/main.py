@@ -3,13 +3,11 @@ import hmac
 import re
 import sentry_sdk
 from contextlib import asynccontextmanager
-from datetime import datetime
 from pathlib import Path
 
 from fastapi import FastAPI, Request, UploadFile, File, Form, Header, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, FileResponse, StreamingResponse
-from fastapi.staticfiles import StaticFiles
+from fastapi.responses import JSONResponse, StreamingResponse
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
@@ -234,7 +232,7 @@ async def analyze(
     full_name = _extract_name_from_report(report_dict, resume_text, file.filename)
 
     folder_path = safe_save_to_folder(
-        file_bytes, file.filename, full_name, seniority
+        resume_markdown, full_name, seniority
     )
 
     entry = TalentPoolEntry(
@@ -342,41 +340,11 @@ async def download_candidate_cv(
     if not entry:
         raise HTTPException(status_code=404, detail="Candidate not found")
 
-    import io
-    return FileResponse(
-        io.BytesIO(entry.file_blob),
-        media_type=entry.file_mimetype,
-        filename=entry.original_filename,
-    )
-
-
-@app.get("/analysis/{candidate_id}/pdf")
-async def download_analysis_pdf(
-    candidate_id: int,
-    session: AsyncSession = Depends(get_session),
-):
-    result = await session.execute(
-        select(TalentPoolEntry).where(TalentPoolEntry.id == candidate_id)
-    )
-    entry = result.scalar_one_or_none()
-    if not entry:
-        raise HTTPException(status_code=404, detail="Candidate not found")
-
-    analysis = {}
-    if entry.analysis_json:
-        try:
-            analysis = json.loads(entry.analysis_json)
-        except json.JSONDecodeError:
-            raise HTTPException(status_code=500, detail="Invalid analysis data")
-
-    from backend.core.pdf_generator import generate_analysis_pdf
-    pdf_bytes = generate_analysis_pdf(analysis, entry.full_name)
-
     safe_name = entry.full_name.replace(" ", "_").replace("/", "_")
     return StreamingResponse(
-        iter([pdf_bytes]),
-        media_type="application/pdf",
-        headers={"Content-Disposition": f'attachment; filename="analysis_{safe_name}.pdf"'},
+        iter([entry.file_blob]),
+        media_type=entry.file_mimetype,
+        headers={"Content-Disposition": f'attachment; filename="{safe_name}_cv{Path(entry.original_filename).suffix}"'},
     )
 
 
@@ -426,11 +394,11 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>{name} — Resume</title>
+<title>$name — Resume</title>
 <style>
-  @page {{ margin: 2cm; size: A4; }}
-  * {{ margin: 0; padding: 0; box-sizing: border-box; }}
-  body {{
+  @page { margin: 2cm; size: A4; }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
     font-family: 'Georgia', 'Times New Roman', serif;
     color: #1a1a2e;
     line-height: 1.6;
@@ -438,8 +406,8 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     margin: 0 auto;
     padding: 2rem;
     background: #fff;
-  }}
-  h2 {{
+  }
+  h2 {
     font-size: 1.15rem;
     font-weight: 700;
     text-transform: uppercase;
@@ -448,34 +416,34 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     border-bottom: 2px solid #1B2A4A;
     padding-bottom: 0.3rem;
     margin: 1.5rem 0 0.75rem;
-  }}
-  h2:first-child {{ margin-top: 0; }}
-  p {{
+  }
+  h2:first-child { margin-top: 0; }
+  p {
     font-size: 0.95rem;
     margin-bottom: 0.4rem;
-  }}
-  ul {{
+  }
+  ul {
     padding-left: 1.5rem;
     margin-bottom: 0.5rem;
-  }}
-  li {{
+  }
+  li {
     font-size: 0.9rem;
     margin-bottom: 0.3rem;
     line-height: 1.5;
-  }}
-  strong {{ color: #1a1a2e; }}
-  hr {{
+  }
+  strong { color: #1a1a2e; }
+  hr {
     border: none;
     border-top: 1px solid #E5E7EB;
     margin: 1rem 0;
-  }}
-  @media print {{
-    body {{ padding: 0; max-width: none; }}
-  }}
+  }
+  @media print {
+    body { padding: 0; max-width: none; }
+  }
 </style>
 </head>
 <body>
-{content}
+$content
 </body>
 </html>"""
 
@@ -497,10 +465,8 @@ async def download_cv_html(
     import markdown as md_lib
     html_body = md_lib.markdown(md_text, extensions=["extra", "sane_lists"])
 
-    html_content = HTML_TEMPLATE.format(
-        name=entry.full_name,
-        content=html_body,
-    )
+    from string import Template
+    html_content = Template(HTML_TEMPLATE).safe_substitute(name=entry.full_name, content=html_body)
     safe_name = entry.full_name.replace(" ", "_").replace("/", "_")
     return StreamingResponse(
         iter([html_content.encode("utf-8")]),
@@ -515,8 +481,9 @@ if STATIC_DIR.is_dir():
 
     @app.get("/{full_path:path}")
     async def serve_spa(full_path: str):
+        if ".." in full_path:
+            raise HTTPException(status_code=400, detail="Invalid path")
         if full_path.startswith(("api/", "admin/", "health", "analyze", "analysis/", "cv/")):
-            from fastapi import HTTPException
             raise HTTPException(status_code=404, detail="Not found")
         file_path = STATIC_DIR / full_path
         if file_path.is_file():

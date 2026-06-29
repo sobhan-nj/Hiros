@@ -1,7 +1,7 @@
 from backend.utils.log import logger
 from backend.core.schema import (
     AnalysisReport as DataclassReport, DimensionResult as DataclassDim,
-    SeniorityCheck, DIMENSION_KEYS, DIMENSION_PRIORITY
+    SeniorityCheck, DIMENSION_KEYS
 )
 from backend.core.validator import AnalysisReport as PydanticReport
 from backend import config, llm_client

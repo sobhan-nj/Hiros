@@ -13,22 +13,21 @@ def build_folder_path(seniority: str) -> Path:
     return Path(config.TALENT_POOL_ROOT) / seniority.lower()
 
 
-def save_to_folder(file_bytes, original_filename, full_name, seniority, created_at=None):
+def save_to_folder(markdown_text: str, full_name: str, seniority: str, created_at=None):
     if created_at is None:
         created_at = datetime.now(timezone.utc)
     folder = build_folder_path(seniority)
     folder.mkdir(parents=True, exist_ok=True)
     date_str = created_at.strftime("%Y%m%d")
-    ext = Path(original_filename).suffix.lower() or ".pdf"
     safe_name = sanitize(full_name)
-    filename = f"{safe_name}_{date_str}{ext}"
+    filename = f"{safe_name}_{date_str}.md"
     counter = 1
     final_path = folder / filename
     while final_path.exists():
-        filename = f"{safe_name}_{date_str}_{counter}{ext}"
+        filename = f"{safe_name}_{date_str}_{counter}.md"
         final_path = folder / filename
         counter += 1
-    final_path.write_bytes(file_bytes)
+    final_path.write_text(markdown_text, encoding="utf-8")
     logger.info(f"Saved to talent pool: {final_path}")
     return str(final_path)
 

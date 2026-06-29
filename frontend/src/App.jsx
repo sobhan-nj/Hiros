@@ -4,7 +4,7 @@ import LoadingScreen from './components/LoadingScreen.jsx'
 import SplitView from './components/SplitView.jsx'
 import AdminLogin from './components/AdminLogin.jsx'
 import AdminDashboard from './components/AdminDashboard.jsx'
-import { adminLogin } from './api/client.js'
+import { getCandidates } from './api/client.js'
 
 function App() {
   const [screen, setScreen] = useState(
@@ -33,14 +33,10 @@ function App() {
   }
 
   const handleAdminLogin = async (key) => {
-    try {
-      await adminLogin(key)
-      setAdminKey(key)
-      setScreen('admin-dashboard')
-      setError(null)
-    } catch (err) {
-      setError('Invalid admin key')
-    }
+    await getCandidates(key)
+    setAdminKey(key)
+    setScreen('admin-dashboard')
+    setError(null)
   }
 
   const handleAdminLogout = () => {

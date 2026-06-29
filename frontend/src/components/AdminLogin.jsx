@@ -13,7 +13,13 @@ function AdminLogin({ onLogin }) {
     }
     setLoading(true)
     setError('')
-    onLogin(key)
+    try {
+      await onLogin(key)
+    } catch {
+      setError('Invalid admin key or server error')
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (
