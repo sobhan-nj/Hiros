@@ -731,7 +731,7 @@ async def download_cv_html(
 
 
 STATIC_DIR = Path(__file__).parent.parent / "frontend" / "dist"
-SPA_EXCLUDED_PREFIXES = ("api/", "admin/", "health", "analyze", "parse", "analysis/", "cv/")
+SPA_EXCLUDED_PREFIXES = ("api/", "health", "analyze", "parse", "analysis/", "cv/")
 
 if STATIC_DIR.is_dir():
     from starlette.responses import FileResponse as StarletteFileResponse
