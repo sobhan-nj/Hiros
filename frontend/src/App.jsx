@@ -1,9 +1,10 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import UploadForm from './components/UploadForm.jsx'
 import Questionnaire from './components/Questionnaire.jsx'
 import SplitView from './components/SplitView.jsx'
 import AdminLogin from './components/AdminLogin.jsx'
 import AdminDashboard from './components/AdminDashboard.jsx'
+import LoadingScreen from './components/LoadingScreen.jsx'
 import { getCandidates, parseResume, analyzeResume } from './api/client.js'
 
 function App() {
@@ -14,24 +15,63 @@ function App() {
   const [adminKey, setAdminKey] = useState(null)
 
   const [parsedData, setParsedData] = useState(null)
+  const [originalFile, setOriginalFile] = useState(null)
+  const [parseDone, setParseDone] = useState(false)
   const [analysisResult, setAnalysisResult] = useState(null)
   const [analysisDone, setAnalysisDone] = useState(false)
   const [allQuestionsDone, setAllQuestionsDone] = useState(false)
   const [analyzing, setAnalyzing] = useState(false)
+  const [pendingSeniority, setPendingSeniority] = useState(null)
   const [answers, setAnswers] = useState({ seniority: 'mid', targetCountry: 'germany', referralSource: '' })
+  const analyzingRef = useRef(false)
 
-  const showResultsIfNeeded = () => {
-    if (analysisDone && analysisResult && allQuestionsDone) {
-      setAnalysisResult(analysisResult)
+  useEffect(() => {
+    if (analysisDone && analysisResult && screen === 'loading') {
       setScreen('results')
       setError(null)
     }
-  }
+  }, [analysisDone, analysisResult, screen])
 
-  const handleParseComplete = (data) => {
-    setParsedData(data)
-    setScreen('questionnaire')
+  useEffect(() => {
+    if (parseDone && parsedData && pendingSeniority && !analyzingRef.current) {
+      analyzingRef.current = true
+      setAnalyzing(true)
+      analyzeResume({
+        resume_text: parsedData.resume_text,
+        resume_markdown: parsedData.resume_markdown,
+        raw_keywords: JSON.stringify(parsedData.raw_keywords),
+        seniority: pendingSeniority,
+        target_country: answers.targetCountry,
+        referral_source: answers.referralSource,
+        resume_filename: parsedData.filename,
+        file: originalFile,
+      }).then(data => {
+        setAnalysisResult(data)
+        setAnalysisDone(true)
+        setAnalyzing(false)
+        analyzingRef.current = false
+      }).catch(err => {
+        const msg = err.response?.data?.detail || err.message || 'Analysis failed'
+        setError(msg)
+        setAnalyzing(false)
+        analyzingRef.current = false
+      })
+    }
+  }, [parseDone, parsedData, pendingSeniority, originalFile, answers.targetCountry, answers.referralSource])
+
+  const handleSubmit = (file) => {
     setError(null)
+    setOriginalFile(file)
+    setScreen('questionnaire')
+
+    parseResume(file).then(data => {
+      setParsedData(data)
+      setParseDone(true)
+    }).catch(err => {
+      const msg = err.response?.data?.detail || err.message || 'Failed to parse resume'
+      setError(msg)
+      setScreen('upload')
+    })
   }
 
   const handleParseError = (msg) => {
@@ -42,46 +82,31 @@ function App() {
   const handleQuestionnaireComplete = (finalAnswers) => {
     setAnswers(finalAnswers)
     setAllQuestionsDone(true)
-    if (analysisDone && analysisResult) {
-      setAnalysisResult(analysisResult)
-      setScreen('results')
-      setError(null)
-    }
   }
 
-  const fireAnalysis = (seniority) => {
-    if (!parsedData || analyzing) return
-    setAnalyzing(true)
-    analyzeResume({
-      resume_text: parsedData.resume_text,
-      resume_markdown: parsedData.resume_markdown,
-      raw_keywords: JSON.stringify(parsedData.raw_keywords),
-      seniority,
-      target_country: answers.targetCountry,
-      referral_source: answers.referralSource,
-      resume_filename: parsedData.filename,
-    }).then(data => {
-      setAnalysisResult(data)
-      setAnalysisDone(true)
-      setAnalyzing(false)
-      if (allQuestionsDone) {
-        setScreen('results')
-        setError(null)
-      }
-    }).catch(err => {
-      const msg = err.response?.data?.detail || err.message || 'Analysis failed'
-      setError(msg)
-      setAnalyzing(false)
-    })
+  const handleSeeResults = () => {
+    setScreen('loading')
+    setError(null)
+  }
+
+  const handleStepAnswer = (stepKey, value) => {
+    setAnswers(prev => ({ ...prev, [stepKey]: value }))
+    if (stepKey === 'seniority') {
+      setPendingSeniority(value)
+    }
   }
 
   const handleReset = () => {
     setScreen('upload')
     setParsedData(null)
+    setOriginalFile(null)
+    setParseDone(false)
     setAnalysisResult(null)
     setAnalysisDone(false)
     setAllQuestionsDone(false)
     setAnalyzing(false)
+    setPendingSeniority(null)
+    analyzingRef.current = false
     setAnswers({ seniority: 'mid', targetCountry: 'germany', referralSource: '' })
     setError(null)
     window.history.pushState({}, '', '/')
@@ -100,16 +125,6 @@ function App() {
     window.history.pushState({}, '', '/admin')
   }
 
-  const handleStepAnswer = (stepKey, value) => {
-    setAnswers(prev => {
-      const next = { ...prev, [stepKey]: value }
-      if (stepKey === 'seniority') {
-        fireAnalysis(value)
-      }
-      return next
-    })
-  }
-
   return (
     <div className="app">
       <header className="app-header">
@@ -122,7 +137,7 @@ function App() {
 
         {screen === 'upload' && (
           <UploadForm
-            onParseComplete={handleParseComplete}
+            onSubmit={handleSubmit}
             onError={handleParseError}
           />
         )}
@@ -132,8 +147,14 @@ function App() {
             onComplete={handleQuestionnaireComplete}
             onStepAnswer={handleStepAnswer}
             analyzing={analyzing}
+            analysisDone={analysisDone}
+            onSeeResults={handleSeeResults}
             answers={answers}
           />
+        )}
+
+        {screen === 'loading' && (
+          <LoadingScreen />
         )}
 
         {screen === 'results' && analysisResult && (

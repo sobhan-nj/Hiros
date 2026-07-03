@@ -59,8 +59,9 @@ class InterceptHandler(logging.Handler):
 
 logging.basicConfig(handlers=[InterceptHandler()], level=0, force=True)
 
-for name in ("uvicorn", "uvicorn.error", "uvicorn.access", "fastapi"):
+for name in ("uvicorn", "uvicorn.error", "uvicorn.access", "fastapi", "pdfplumber", "pdfminer"):
     logging.getLogger(name).handlers = []
+    logging.getLogger(name).setLevel(logging.WARNING)
 
 
 class SmartCaptureHandler:

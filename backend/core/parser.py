@@ -52,7 +52,7 @@ def clean_extracted_text(text: str) -> str:
         stripped = line.strip()
         if len(stripped) > 10:
             line_counts[stripped] = line_counts.get(stripped, 0) + 1
-    repeated = {line for line, count in line_counts.items() if count >= 3}
+    repeated = {line for line, count in line_counts.items() if count >= 5}
     cleaned = []
     for line in lines:
         stripped = line.strip()

@@ -52,11 +52,18 @@ async def init_db():
             ("referral_source", "VARCHAR(100)"),
         ]:
             try:
-                await conn.execute(text(
-                    f"ALTER TABLE talent_pool ADD COLUMN IF NOT EXISTS {col} {typedef}"
+                # Check if column exists first (SQLite doesn't support IF NOT EXISTS for ADD COLUMN)
+                result = await conn.execute(text(
+                    f"SELECT COUNT(*) FROM pragma_table_info('talent_pool') WHERE name='{col}'"
                 ))
-            except Exception:
-                pass
+                exists = result.scalar() > 0
+                if not exists:
+                    await conn.execute(text(
+                        f"ALTER TABLE talent_pool ADD COLUMN {col} {typedef}"
+                    ))
+                    logger.info(f"Added missing column: {col}")
+            except Exception as e:
+                logger.debug(f"Column migration for {col}: {e}")
     logger.info("Database initialized")
 
 

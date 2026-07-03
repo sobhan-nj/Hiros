@@ -81,6 +81,26 @@ class DimensionResult(BaseModel):
             return [v]
         return v
 
+    @field_validator("fixes", mode="after")
+    @classmethod
+    def clean_fixes(cls, v):
+        """Strip JSON fragments, highlight_targets leaks, and empty strings from fixes."""
+        import re
+        cleaned = []
+        for fix in v:
+            if not fix or not fix.strip():
+                continue
+            f = fix.strip()
+            # Skip JSON-like fragments
+            if re.search(r'(highlight_targets|"[^"]*":\s*[\[{]|\'[^\']*\':\s*[\[{])', f):
+                continue
+            if f.startswith('{') or f.startswith('[') or f.startswith('"'):
+                continue
+            if f.endswith('},') or f.endswith('}]') or f.endswith('",'):
+                continue
+            cleaned.append(f)
+        return cleaned
+
     @field_validator("highlight_targets", mode="before")
     @classmethod
     def coerce_highlights(cls, v):

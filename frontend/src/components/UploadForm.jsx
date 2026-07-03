@@ -1,10 +1,8 @@
 import React, { useState, useRef, useEffect } from 'react'
-import { parseResume } from '../api/client.js'
 
-function UploadForm({ onParseComplete, onError }) {
+function UploadForm({ onSubmit, onError }) {
   const [file, setFile] = useState(null)
   const [dragActive, setDragActive] = useState(false)
-  const [parsing, setParsing] = useState(false)
   const turnstileRef = useRef(null)
   const [turnstileToken, setTurnstileToken] = useState(null)
 
@@ -48,7 +46,7 @@ function UploadForm({ onParseComplete, onError }) {
     }
   }
 
-  const handleSubmit = async (e) => {
+  const handleSubmit = (e) => {
     e.preventDefault()
     if (!file) {
       onError('Please select a file to analyze.')
@@ -60,17 +58,7 @@ function UploadForm({ onParseComplete, onError }) {
       return
     }
 
-    setParsing(true)
-
-    try {
-      const result = await parseResume(file, turnstileToken)
-      onParseComplete(result)
-    } catch (err) {
-      const msg = err.response?.data?.detail || err.message || 'Failed to parse resume'
-      onError(msg)
-    } finally {
-      setParsing(false)
-    }
+    onSubmit(file)
   }
 
   return (
@@ -108,8 +96,8 @@ function UploadForm({ onParseComplete, onError }) {
         </div>
       )}
 
-      <button type="submit" className="btn-analyze" disabled={!file || parsing}>
-        {parsing ? 'Parsing...' : 'Start Analysis'}
+      <button type="submit" className="btn-analyze" disabled={!file}>
+        Start Analysis
       </button>
     </form>
   )

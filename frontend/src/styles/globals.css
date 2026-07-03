@@ -360,6 +360,15 @@ body {
   line-height: 1.5;
 }
 
+/* Analysis Body (scroll container) */
+.analysis-body {
+  flex: 1;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
 /* Analysis List */
 .analysis-list {
   flex: 1;
@@ -491,7 +500,7 @@ body {
 }
 
 .detail-list li {
-  font-size: 0.8rem;
+  font-size: 0.9rem;
   color: #374151;
   padding: 0.35rem 0;
   border-bottom: 1px solid #F9FAFB;
@@ -1046,7 +1055,7 @@ body {
 
 .priority-fixes li {
   color: #374151;
-  font-size: 0.8rem;
+  font-size: 0.9rem;
   margin-bottom: 0.3rem;
   line-height: 1.5;
 }
@@ -1054,7 +1063,7 @@ body {
 .fix-dim {
   color: #1B2A4A;
   font-weight: 600;
-  font-size: 0.75rem;
+  font-size: 0.85rem;
   margin-right: 0.3rem;
 }
 
@@ -1121,12 +1130,18 @@ body {
 
 /* Questionnaire */
 .questionnaire {
-  max-width: 520px;
+  max-width: 700px;
   margin: 2rem auto;
   background: #ffffff;
   border: 1px solid #E5E7EB;
   border-radius: 12px;
   overflow: hidden;
+}
+
+@media (max-width: 768px) {
+  .questionnaire {
+    max-width: 520px;
+  }
 }
 
 .questionnaire-progress {
@@ -1167,21 +1182,40 @@ body {
 
 .questionnaire-options {
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
+  flex-wrap: wrap;
   gap: 0.6rem;
+}
+
+@media (max-width: 768px) {
+  .questionnaire-options {
+    flex-direction: column;
+  }
 }
 
 .questionnaire-option {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  padding: 1rem 1.25rem;
+  padding: 0.75rem 1rem;
   background: #F8F9FA;
   border: 2px solid #E5E7EB;
   border-radius: 10px;
   cursor: pointer;
   transition: all 0.15s;
   text-align: left;
+  flex: 1 1 calc(25% - 0.6rem);
+  min-width: 140px;
+  max-width: 200px;
+}
+
+@media (max-width: 768px) {
+  .questionnaire-option {
+    flex: none;
+    min-width: unset;
+    max-width: unset;
+    padding: 1rem 1.25rem;
+  }
 }
 
 .questionnaire-option:hover {

@@ -7,7 +7,7 @@ const turndown = new TurndownService({
   bulletListMarker: '-',
 })
 
-function CVPreviewPanel({ resumeText, resumeMarkdown, resumeFilename, candidateId }) {
+function CVPreviewPanel({ resumeText, resumeMarkdown, resumeFilename, candidateId, onUpdateMarkdown }) {
   const [isEditing, setIsEditing] = useState(false)
   const [editedHtml, setEditedHtml] = useState('')
   const [showMenu, setShowMenu] = useState(false)
@@ -45,8 +45,13 @@ function CVPreviewPanel({ resumeText, resumeMarkdown, resumeFilename, candidateI
   }, [])
 
   const handleSave = useCallback(() => {
+    if (editorRef.current) {
+      const html = editorRef.current.innerHTML
+      const md = turndown.turndown(html)
+      if (onUpdateMarkdown) onUpdateMarkdown(md)
+    }
     setIsEditing(false)
-  }, [])
+  }, [onUpdateMarkdown])
 
   const downloadMarkdown = useCallback(() => {
     const html = isEditing && editorRef.current
@@ -68,6 +73,14 @@ function CVPreviewPanel({ resumeText, resumeMarkdown, resumeFilename, candidateI
     if (candidateId) {
       const baseUrl = import.meta.env.PROD ? '' : '/api'
       window.open(`${baseUrl}/cv/${candidateId}/download/html`, '_blank')
+    }
+    setShowMenu(false)
+  }, [candidateId])
+
+  const downloadLatex = useCallback(async () => {
+    if (candidateId) {
+      const baseUrl = import.meta.env.PROD ? '' : '/api'
+      window.open(`${baseUrl}/cv/${candidateId}/download/tex`, '_blank')
     }
     setShowMenu(false)
   }, [candidateId])
@@ -110,6 +123,7 @@ function CVPreviewPanel({ resumeText, resumeMarkdown, resumeFilename, candidateI
                   <div className="cv-download-menu">
                     <button onClick={downloadMarkdown}>as Markdown (.md)</button>
                     <button onClick={downloadHtml}>as Template (.html)</button>
+                    <button onClick={downloadLatex}>as LaTeX (.tex)</button>
                   </div>
                 )}
               </div>

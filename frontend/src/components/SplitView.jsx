@@ -9,6 +9,7 @@ function SplitView({ results, onReset }) {
   const { id, analysis } = results
   const [activeGroup, setActiveGroup] = useState('content')
   const [expandedSub, setExpandedSub] = useState(null)
+  const [localMarkdown, setLocalMarkdown] = useState(analysis.resume_markdown || '')
 
   const { dimension_groups, tier, verdict, header, priority_fixes } = analysis
   const candidateName = header?.candidate_name || analysis.candidate_name || 'Candidate'
@@ -86,9 +87,10 @@ function SplitView({ results, onReset }) {
         <div className="cv-preview-panel">
           <CVPreviewPanel
             resumeText={analysis.resume_text}
-            resumeMarkdown={analysis.resume_markdown}
+            resumeMarkdown={localMarkdown}
             resumeFilename={analysis.resume_filename}
             candidateId={id}
+            onUpdateMarkdown={setLocalMarkdown}
           />
         </div>
       </div>

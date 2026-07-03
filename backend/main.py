@@ -180,6 +180,7 @@ async def analyze(
     target_country: str = Form("germany"),
     referral_source: str = Form(""),
     resume_filename: str = Form("resume.pdf"),
+    file: UploadFile = File(None),
     x_api_key: str = Header(None),
     session: AsyncSession = Depends(get_session),
 ):
@@ -261,23 +262,35 @@ async def analyze(
     }
 
     if target_country != "germany":
+        country_label = target_country.title()
+        not_present_reason = (
+            f"Approbation is a German-specific credential and does not apply to the {country_label} job market. "
+            f"This dimension is rated Great because no German medical license is required."
+        )
         for dim_key in ("legal_eligibility_status",):
             if dim_key in report_dict.get("dimensions", {}):
-                report_dict["dimensions"][dim_key]["rating"] = "Not Present"
-                report_dict["dimensions"][dim_key]["summary"] = f"Skipped — not applicable for {target_country.title()} job market."
+                report_dict["dimensions"][dim_key]["rating"] = "Great"
+                report_dict["dimensions"][dim_key]["summary"] = not_present_reason
                 report_dict["dimensions"][dim_key]["issues"] = []
                 report_dict["dimensions"][dim_key]["fixes"] = []
             for g in report_dict.get("dimension_groups", {}).values():
                 if dim_key in g.get("dimensions", {}):
-                    g["dimensions"][dim_key]["rating"] = "Not Present"
-                    g["dimensions"][dim_key]["summary"] = f"Skipped — not applicable for {target_country.title()} job market."
+                    g["dimensions"][dim_key]["rating"] = "Great"
+                    g["dimensions"][dim_key]["summary"] = not_present_reason
                     g["dimensions"][dim_key]["issues"] = []
                     g["dimensions"][dim_key]["fixes"] = []
 
     full_name = _extract_name_from_report(report_dict, resume_text, resume_filename)
 
+    file_blob = b""
+    file_mimetype = "text/markdown"
+    if file:
+        file_blob = await file.read()
+        file_mimetype = file.content_type or "application/octet-stream"
+
+    now = datetime.now(timezone.utc)
     folder_path = safe_save_to_folder(
-        resume_markdown, full_name, seniority
+        resume_markdown, full_name, seniority, created_at=now
     )
 
     entry = TalentPoolEntry(
@@ -287,8 +300,8 @@ async def analyze(
         seniority_match=report.seniority_check.status,
         tier=report.tier,
         original_filename=resume_filename,
-        file_mimetype="text/markdown",
-        file_blob=b"",
+        file_mimetype=file_mimetype,
+        file_blob=file_blob,
         folder_path=folder_path,
         resume_text=resume_text,
         resume_markdown=resume_markdown,
@@ -457,6 +470,7 @@ async def download_candidate_cv(
 @app.get("/cv/{candidate_id}")
 async def serve_cv_file(
     candidate_id: int,
+    admin_key: str = Depends(_verify_admin_key),
     session: AsyncSession = Depends(get_session),
 ):
     result = await session.execute(
@@ -476,6 +490,7 @@ async def serve_cv_file(
 @app.get("/cv/{candidate_id}/download/md")
 async def download_cv_markdown(
     candidate_id: int,
+    admin_key: str = Depends(_verify_admin_key),
     session: AsyncSession = Depends(get_session),
 ):
     result = await session.execute(
@@ -492,6 +507,140 @@ async def download_cv_markdown(
         media_type="text/markdown; charset=utf-8",
         headers={"Content-Disposition": f'attachment; filename="{safe_name}_resume.md"'},
     )
+
+
+@app.get("/cv/{candidate_id}/download/tex")
+async def download_cv_latex(
+    candidate_id: int,
+    session: AsyncSession = Depends(get_session),
+):
+    result = await session.execute(
+        select(TalentPoolEntry).where(TalentPoolEntry.id == candidate_id)
+    )
+    entry = result.scalar_one_or_none()
+    if not entry:
+        raise HTTPException(status_code=404, detail="Candidate not found")
+
+    md_text = entry.resume_markdown or entry.resume_text or ""
+    latex_text = markdown_to_latex(md_text)
+    safe_name = entry.full_name.replace(" ", "_").replace("/", "_")
+    return StreamingResponse(
+        iter([latex_text.encode("utf-8")]),
+        media_type="application/x-tex; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{safe_name}_resume.tex"'},
+    )
+
+
+def markdown_to_latex(md_text: str) -> str:
+    """Convert resume markdown to a clean LaTeX document."""
+    import re
+
+    lines = md_text.split('\n')
+    latex_lines = []
+    in_itemize = False
+
+    preamble = r"""\documentclass[11pt,a4paper]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[margin=2cm]{geometry}
+\usepackage{enumitem}
+\usepackage{hyperref}
+\usepackage{titlesec}
+
+\titleformat{\section}{\large\bfseries\uppercase}{}{0em}{}[\titlerule]
+\titlespacing*{\section}{0pt}{12pt}{6pt}
+
+\setlist[itemize]{noitemsep, topsep=0pt, leftmargin=1.5em}
+\pagestyle{empty}
+\setlength{\parindent}{0pt}
+
+\begin{document}
+"""
+    latex_lines.append(preamble)
+
+    for line in lines:
+        stripped = line.strip()
+
+        if not stripped:
+            if in_itemize:
+                latex_lines.append(r'\end{itemize}')
+                in_itemize = False
+            latex_lines.append('')
+            continue
+
+        # Horizontal rule
+        if re.match(r'^-{3,}$', stripped):
+            if in_itemize:
+                latex_lines.append(r'\end{itemize}')
+                in_itemize = False
+            latex_lines.append(r'\vspace{4pt}\hrule\vspace{4pt}')
+            continue
+
+        # Section headers (## Header)
+        header_match = re.match(r'^##\s+(.+)$', stripped)
+        if header_match:
+            if in_itemize:
+                latex_lines.append(r'\end{itemize}')
+                in_itemize = False
+            title = header_match.group(1).strip()
+            latex_lines.append(f'\\section{{{title}}}')
+            continue
+
+        # Sub-headers (# Header)
+        subheader_match = re.match(r'^#\s+(.+)$', stripped)
+        if subheader_match:
+            if in_itemize:
+                latex_lines.append(r'\end{itemize}')
+                in_itemize = False
+            title = subheader_match.group(1).strip()
+            latex_lines.append(f'\\subsection*{{{title}}}')
+            continue
+
+        # Bold headers ( **Label:** value )
+        bold_label = re.match(r'^\*\*(.+?)\*\*\s*(.*)', stripped)
+        if bold_label:
+            if in_itemize:
+                latex_lines.append(r'\end{itemize}')
+                in_itemize = False
+            label = bold_label.group(1).strip().rstrip(':')
+            value = bold_label.group(2).strip()
+            if value:
+                latex_lines.append(f'\\textbf{{{label}:}} {value} \\\\')
+            else:
+                latex_lines.append(f'\\textbf{{{label}:}} \\\\')
+            continue
+
+        # Bullet points
+        bullet_match = re.match(r'^[-•*]\s+(.+)$', stripped)
+        if bullet_match:
+            if not in_itemize:
+                latex_lines.append(r'\begin{itemize}')
+                in_itemize = True
+            content = bullet_match.group(1).strip()
+            # Convert **bold** to \textbf{bold}
+            content = re.sub(r'\*\*(.+?)\*\*', r'\\textbf{\1}', content)
+            # Convert *italic* to \textit{italic}
+            content = re.sub(r'\*(.+?)\*', r'\\textit{\1}', content)
+            latex_lines.append(f'  \\item {content}')
+            continue
+
+        # Regular text
+        if in_itemize:
+            latex_lines.append(r'\end{itemize}')
+            in_itemize = False
+
+        # Convert **bold** to \textbf{bold}
+        text = re.sub(r'\*\*(.+?)\*\*', r'\\textbf{\1}', stripped)
+        # Convert *italic* to \textit{italic}
+        text = re.sub(r'\*(.+?)\*', r'\\textit{\1}', text)
+        latex_lines.append(text + ' \\\\' if text else '')
+
+    if in_itemize:
+        latex_lines.append(r'\end{itemize}')
+
+    latex_lines.append(r'\end{document}')
+
+    return '\n'.join(latex_lines)
 
 
 HTML_TEMPLATE = """<!DOCTYPE html>
@@ -556,6 +705,7 @@ $content
 @app.get("/cv/{candidate_id}/download/html")
 async def download_cv_html(
     candidate_id: int,
+    admin_key: str = Depends(_verify_admin_key),
     session: AsyncSession = Depends(get_session),
 ):
     result = await session.execute(
@@ -581,6 +731,8 @@ async def download_cv_html(
 
 
 STATIC_DIR = Path(__file__).parent.parent / "frontend" / "dist"
+SPA_EXCLUDED_PREFIXES = ("api/", "admin/", "health", "analyze", "parse", "analysis/", "cv/")
+
 if STATIC_DIR.is_dir():
     from starlette.responses import FileResponse as StarletteFileResponse
 
@@ -588,7 +740,7 @@ if STATIC_DIR.is_dir():
     async def serve_spa(full_path: str):
         if ".." in full_path:
             raise HTTPException(status_code=400, detail="Invalid path")
-        if full_path.startswith(("api/", "admin/", "health", "analyze", "parse", "analysis/", "cv/")):
+        if any(full_path.startswith(p) or full_path == p.rstrip("/") for p in SPA_EXCLUDED_PREFIXES):
             raise HTTPException(status_code=404, detail="Not found")
         file_path = STATIC_DIR / full_path
         if file_path.is_file():

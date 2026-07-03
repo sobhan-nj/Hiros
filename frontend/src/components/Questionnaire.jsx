@@ -42,27 +42,35 @@ const STEPS = [
   },
 ]
 
-function Questionnaire({ onComplete, onStepAnswer, analyzing, answers }) {
+function Questionnaire({ onComplete, onStepAnswer, onSeeResults, answers }) {
   const [step, setStep] = React.useState(0)
+  const [localSelection, setLocalSelection] = React.useState(null)
 
   const current = STEPS[step]
   const isLast = step === STEPS.length - 1
   const progress = ((step + 1) / STEPS.length) * 100
 
   const handleSelect = (value) => {
+    setLocalSelection(value)
     onStepAnswer(current.key, value)
   }
 
   const handleNext = () => {
+    const value = localSelection ?? answers[current.key]
+    onStepAnswer(current.key, value)
     if (isLast) {
-      onComplete(answers)
+      onComplete({ ...answers, [current.key]: value })
     } else {
       setStep(step + 1)
+      setLocalSelection(null)
     }
   }
 
   const handleBack = () => {
-    if (step > 0) setStep(step - 1)
+    if (step > 0) {
+      setStep(step - 1)
+      setLocalSelection(null)
+    }
   }
 
   return (
@@ -82,7 +90,7 @@ function Questionnaire({ onComplete, onStepAnswer, analyzing, answers }) {
           {current.options.map(opt => (
             <button
               key={opt.value}
-              className={`questionnaire-option ${answers[current.key] === opt.value ? 'selected' : ''}`}
+              className={`questionnaire-option ${(localSelection ?? answers[current.key]) === opt.value ? 'selected' : ''}`}
               onClick={() => handleSelect(opt.value)}
             >
               <span className="option-label">{opt.label}</span>
@@ -98,8 +106,8 @@ function Questionnaire({ onComplete, onStepAnswer, analyzing, answers }) {
             Back
           </button>
         )}
-        <button className="btn-next-questionnaire" onClick={handleNext}>
-          {isLast ? (analyzing ? 'Analyzing...' : 'Analyze Resume') : 'Next'}
+        <button className="btn-next-questionnaire" onClick={isLast ? () => onSeeResults({ ...answers, [current.key]: localSelection ?? answers[current.key] }) : handleNext}>
+          {isLast ? 'See the Results' : 'Next'}
         </button>
       </div>
     </div>

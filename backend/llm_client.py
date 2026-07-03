@@ -1,7 +1,9 @@
+import asyncio
 from backend.utils.log import logger
 from backend import config
 
 _gemini_cached_content = None
+_gemini_cache_lock = asyncio.Lock()
 
 
 async def generate(system_prompt: str, user_message: str, max_tokens: int = 4096) -> str:
@@ -41,17 +43,18 @@ async def _call_gemini(system_prompt: str, user_message: str, max_tokens: int) -
     genai.configure(api_key=config.GEMINI_API_KEY)
 
     global _gemini_cached_content
-    if _gemini_cached_content is None or getattr(_gemini_cached_content, 'expired', False):
-        try:
-            _gemini_cached_content = genai.cached_content.create(
-                model=config.LLM_MODEL,
-                system_instruction=system_prompt,
-                ttl="3600s",
-            )
-            logger.info(f"Gemini prompt cached ({len(system_prompt)} chars, TTL 1h)")
-        except Exception as e:
-            logger.warning(f"Gemini cache creation failed, falling back: {e}")
-            _gemini_cached_content = None
+    async with _gemini_cache_lock:
+        if _gemini_cached_content is None or getattr(_gemini_cached_content, 'expired', False):
+            try:
+                _gemini_cached_content = genai.cached_content.create(
+                    model=config.LLM_MODEL,
+                    system_instruction=system_prompt,
+                    ttl="3600s",
+                )
+                logger.info(f"Gemini prompt cached ({len(system_prompt)} chars, TTL 1h)")
+            except Exception as e:
+                logger.warning(f"Gemini cache creation failed, falling back: {e}")
+                _gemini_cached_content = None
 
     if _gemini_cached_content and not getattr(_gemini_cached_content, 'expired', False):
         model = genai.GenerativeModel.from_cached_content(_gemini_cached_content)
@@ -110,7 +113,8 @@ async def _call_openai_compatible(system_prompt: str, user_message: str, max_tok
 
 
 async def _call_openai_structured(system_prompt: str, user_message: str, response_model, max_tokens: int):
-    """OpenAI-compatible structured output via beta.chat.completions.parse()."""
+    """OpenAI-compatible structured output. Tries beta.chat.completions.parse() first,
+    falls back to regular generation + manual JSON parsing."""
     from openai import AsyncOpenAI
     provider = config.LLM_PROVIDER
     if provider == "mimo":
@@ -123,20 +127,58 @@ async def _call_openai_structured(system_prompt: str, user_message: str, respons
         api_key = config.OPENAI_API_KEY
         base_url = None
     client = AsyncOpenAI(api_key=api_key, base_url=base_url, timeout=300)
-    completion = await client.beta.chat.completions.parse(
+
+    # Try native structured output first
+    if hasattr(client, 'beta') and hasattr(getattr(client, 'beta', None), 'chat'):
+        try:
+            completion = await client.beta.chat.completions.parse(
+                model=config.LLM_MODEL,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_message},
+                ],
+                response_format=response_model,
+                max_tokens=max_tokens,
+                temperature=0.2,
+            )
+            parsed = completion.choices[0].message.parsed
+            if parsed is not None:
+                return parsed
+        except Exception as e:
+            logger.warning(f"Structured output via beta.parse failed, falling back: {e}")
+
+    # Fallback: regular generation + JSON parsing
+    return await _call_openai_with_json_fallback(client, system_prompt, user_message, response_model, max_tokens)
+
+
+async def _call_openai_with_json_fallback(client, system_prompt: str, user_message: str, response_model, max_tokens: int):
+    """Generate text asking for JSON, then parse into the response model."""
+    import json, re
+    json_instruction = (
+        f"\n\nYou MUST respond with a single valid JSON object matching this schema. "
+        f"No markdown, no explanation, just the raw JSON object.\n"
+        f"Schema: {response_model.model_json_schema()}"
+    )
+    completion = await client.chat.completions.create(
         model=config.LLM_MODEL,
         messages=[
-            {"role": "system", "content": system_prompt},
+            {"role": "system", "content": system_prompt + json_instruction},
             {"role": "user", "content": user_message},
         ],
-        response_format=response_model,
         max_tokens=max_tokens,
         temperature=0.2,
     )
-    parsed = completion.choices[0].message.parsed
-    if parsed is None:
-        raise ValueError("LLM response could not be parsed into the expected schema")
-    return parsed
+    raw = completion.choices[0].message.content or ""
+    cleaned = re.sub(r"```json\s*|```\s*", "", raw).strip()
+    try:
+        data = json.loads(cleaned)
+    except json.JSONDecodeError:
+        match = re.search(r'\{.*\}', cleaned, re.DOTALL)
+        if match:
+            data = json.loads(match.group())
+        else:
+            raise ValueError(f"Failed to parse JSON from response: {raw[:500]}")
+    return response_model.model_validate(data)
 
 
 async def _call_anthropic(system_prompt: str, user_message: str, max_tokens: int) -> str:

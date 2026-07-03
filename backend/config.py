@@ -57,13 +57,23 @@ _cached_prompt: str | None = None
 
 def load_system_prompt() -> str:
     global _cached_prompt
-    if not IS_PRODUCTION or _cached_prompt is None:
+    if _cached_prompt is None:
         try:
             _cached_prompt = _PROMPT_PATH.read_text(encoding="utf-8")
             logger.debug(f"System prompt loaded ({len(_cached_prompt)} chars)")
         except FileNotFoundError:
             logger.error(f"system_prompt.txt not found at {_PROMPT_PATH}")
             _cached_prompt = "You are a resume analyst."
+    return _cached_prompt
+
+
+def reload_system_prompt() -> str:
+    global _cached_prompt
+    try:
+        _cached_prompt = _PROMPT_PATH.read_text(encoding="utf-8")
+        logger.info(f"System prompt reloaded ({len(_cached_prompt)} chars)")
+    except FileNotFoundError:
+        logger.error(f"system_prompt.txt not found at {_PROMPT_PATH}")
     return _cached_prompt
 
 

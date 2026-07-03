@@ -13,7 +13,7 @@ export const parseResume = async (file, turnstileToken) => {
   if (turnstileToken) headers['x-turnstile-token'] = turnstileToken
   const response = await api.post('/parse', formData, {
     headers,
-    timeout: 30000,
+    timeout: 120000,
   })
   return response.data
 }
@@ -21,7 +21,11 @@ export const parseResume = async (file, turnstileToken) => {
 export const analyzeResume = async (params, turnstileToken) => {
   const formData = new FormData()
   for (const [key, val] of Object.entries(params)) {
-    if (val !== undefined && val !== null) formData.append(key, typeof val === 'object' ? JSON.stringify(val) : val)
+    if (key === 'file') {
+      if (val) formData.append('file', val)
+    } else if (val !== undefined && val !== null) {
+      formData.append(key, typeof val === 'object' ? JSON.stringify(val) : val)
+    }
   }
   const headers = { 'Content-Type': 'multipart/form-data' }
   const apiKey = import.meta.env.VITE_ANALYSIS_API_KEY
