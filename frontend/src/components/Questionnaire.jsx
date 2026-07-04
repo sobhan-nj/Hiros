@@ -99,11 +99,13 @@ function Questionnaire({ onComplete, onStepAnswer, onSeeResults, answers }) {
       </div>
 
       <div className="questionnaire-nav">
-        {step > 0 && (
-          <button className="btn-back-questionnaire" onClick={handleBack}>
-            Back
-          </button>
-        )}
+        <button
+          className="btn-back-questionnaire"
+          onClick={handleBack}
+          style={{ visibility: step > 0 ? 'visible' : 'hidden' }}
+        >
+          Back
+        </button>
         <button className="btn-next-questionnaire" onClick={isLast ? () => onSeeResults({ ...answers, [current.key]: localSelection ?? answers[current.key] }) : handleNext}>
           {isLast ? 'See the Results' : 'Next'}
         </button>
