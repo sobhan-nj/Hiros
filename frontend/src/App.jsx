@@ -5,7 +5,7 @@ import SplitView from './components/SplitView.jsx'
 import AdminLogin from './components/AdminLogin.jsx'
 import AdminDashboard from './components/AdminDashboard.jsx'
 import LoadingScreen from './components/LoadingScreen.jsx'
-import { getCandidates, parseResume, analyzeResume } from './api/client.js'
+import { getCandidates, parseResume, analyzeResumeStream } from './api/client.js'
 
 function App() {
   const [screen, setScreen] = useState(
@@ -22,6 +22,7 @@ function App() {
   const [allQuestionsDone, setAllQuestionsDone] = useState(false)
   const [analyzing, setAnalyzing] = useState(false)
   const [pendingSeniority, setPendingSeniority] = useState(null)
+  const [loadingStep, setLoadingStep] = useState(null)
   const [answers, setAnswers] = useState({ seniority: 'mid', targetCountry: 'germany', referralSource: '' })
   const analyzingRef = useRef(false)
 
@@ -36,7 +37,8 @@ function App() {
     if (parseDone && parsedData && pendingSeniority && !analyzingRef.current) {
       analyzingRef.current = true
       setAnalyzing(true)
-      analyzeResume({
+      setLoadingStep({ step: 'parsing', message: 'Extracting keywords and building prompt...' })
+      analyzeResumeStream({
         resume_text: parsedData.resume_text,
         resume_markdown: parsedData.resume_markdown,
         raw_keywords: JSON.stringify(parsedData.raw_keywords),
@@ -44,20 +46,24 @@ function App() {
         target_country: answers.targetCountry,
         referral_source: answers.referralSource,
         resume_filename: parsedData.filename,
-        file: originalFile,
-      }).then(data => {
-        setAnalysisResult(data)
-        setAnalysisDone(true)
-        setAnalyzing(false)
-        analyzingRef.current = false
-      }).catch(err => {
-        const msg = err.response?.data?.detail || err.message || 'Analysis failed'
-        setError(msg)
-        setAnalyzing(false)
-        analyzingRef.current = false
+      }, {
+        onStep: (step) => setLoadingStep(step),
+        onResult: (data) => {
+          setAnalysisResult(data)
+          setAnalysisDone(true)
+          setAnalyzing(false)
+          setLoadingStep(null)
+          analyzingRef.current = false
+        },
+        onError: (msg) => {
+          setError(msg)
+          setAnalyzing(false)
+          setLoadingStep(null)
+          analyzingRef.current = false
+        },
       })
     }
-  }, [parseDone, parsedData, pendingSeniority, originalFile, answers.targetCountry, answers.referralSource])
+  }, [parseDone, parsedData, pendingSeniority, answers.targetCountry, answers.referralSource])
 
   const handleSubmit = (file) => {
     setError(null)
@@ -106,6 +112,7 @@ function App() {
     setAllQuestionsDone(false)
     setAnalyzing(false)
     setPendingSeniority(null)
+    setLoadingStep(null)
     analyzingRef.current = false
     setAnswers({ seniority: 'mid', targetCountry: 'germany', referralSource: '' })
     setError(null)
@@ -154,7 +161,7 @@ function App() {
         )}
 
         {screen === 'loading' && (
-          <LoadingScreen />
+          <LoadingScreen step={loadingStep} />
         )}
 
         {screen === 'results' && analysisResult && (

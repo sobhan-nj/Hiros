@@ -180,7 +180,6 @@ async def analyze(
     target_country: str = Form("germany"),
     referral_source: str = Form(""),
     resume_filename: str = Form("resume.pdf"),
-    file: UploadFile = File(None),
     x_api_key: str = Header(None),
     session: AsyncSession = Depends(get_session),
 ):
@@ -282,12 +281,6 @@ async def analyze(
 
     full_name = _extract_name_from_report(report_dict, resume_text, resume_filename)
 
-    file_blob = b""
-    file_mimetype = "text/markdown"
-    if file:
-        file_blob = await file.read()
-        file_mimetype = file.content_type or "application/octet-stream"
-
     now = datetime.now(timezone.utc)
     folder_path = safe_save_to_folder(
         resume_markdown, full_name, seniority, created_at=now
@@ -300,8 +293,6 @@ async def analyze(
         seniority_match=report.seniority_check.status,
         tier=report.tier,
         original_filename=resume_filename,
-        file_mimetype=file_mimetype,
-        file_blob=file_blob,
         folder_path=folder_path,
         resume_text=resume_text,
         resume_markdown=resume_markdown,
@@ -321,6 +312,185 @@ async def analyze(
         "id": entry.id,
         "analysis": report_dict,
     })
+
+
+import asyncio
+import multiprocessing
+
+_active_workers = 0
+_worker_lock = asyncio.Lock()
+MAX_WORKERS = multiprocessing.cpu_count() * 2 + 1
+
+
+@app.post("/analyze/stream")
+@limiter.limit("10/minute")
+async def analyze_stream(
+    request: Request,
+    resume_text: str = Form(...),
+    resume_markdown: str = Form(""),
+    raw_keywords: str = Form("[]"),
+    seniority: str = Form("mid"),
+    target_country: str = Form("germany"),
+    referral_source: str = Form(""),
+    resume_filename: str = Form("resume.pdf"),
+    x_api_key: str = Header(None),
+    session: AsyncSession = Depends(get_session),
+):
+    global _active_workers
+    if config.ANALYSIS_API_KEY and x_api_key != config.ANALYSIS_API_KEY:
+        raise HTTPException(status_code=401, detail="Invalid API key")
+    if _active_workers >= MAX_WORKERS:
+        raise HTTPException(
+            status_code=503,
+            detail="All analysis slots are busy. Please try again in 30 seconds.",
+        )
+    if seniority.lower() not in ("junior", "mid", "senior", "executive"):
+        seniority = "mid"
+    target_country = target_country.lower().strip() or "germany"
+
+    try:
+        keywords_list = json.loads(raw_keywords)
+    except (json.JSONDecodeError, TypeError):
+        keywords_list = []
+
+    _active_workers += 1
+
+    async def event_stream():
+        global _active_workers
+
+        yield f"event: step\ndata: {json.dumps({'step': 'parsing', 'message': 'Extracting keywords and building prompt...'})}\n\n"
+
+        try:
+            report = await analyze_resume(resume_text, keywords_list, seniority)
+        except Exception as e:
+            logger.error(f"Analysis failed: {e}")
+            yield f"event: error\ndata: {json.dumps({'detail': 'LLM analysis failed. Please try again.'})}\n\n"
+            return
+        finally:
+            _active_workers -= 1
+
+        yield f"event: step\ndata: {json.dumps({'step': 'report', 'message': 'Building your report...'})}\n\n"
+
+        sorted_dims = {k: report.dimensions[k] for k in DIMENSION_KEYS if k in report.dimensions}
+
+        dim_groups = {}
+        for group_key, group_info in DIMENSION_GROUPS.items():
+            group_dims = {}
+            for dk in group_info["keys"]:
+                if dk in sorted_dims:
+                    v = sorted_dims[dk]
+                    group_dims[dk] = {
+                        "code": v.code,
+                        "name": v.name,
+                        "priority_tier": v.priority_tier,
+                        "rating": v.rating,
+                        "confidence": v.confidence,
+                        "summary": v.summary,
+                        "issues": v.issues,
+                        "fixes": v.fixes,
+                        "highlight_targets": getattr(v, 'highlight_targets', []),
+                    }
+            dim_groups[group_key] = {
+                "icon": group_info["icon"],
+                "label": group_info["label"],
+                "dimensions": group_dims,
+            }
+
+        report_dict = {
+            "extraction_status": report.extraction_status,
+            "extraction_notes": report.extraction_notes,
+            "header": report.header,
+            "executive_summary": report.executive_summary,
+            "candidate_name": report.candidate_name,
+            "seniority_check": {
+                "status": report.seniority_check.status,
+                "detected_level": report.seniority_check.detected_level,
+                "reason": report.seniority_check.reason,
+            },
+            "dimension_groups": dim_groups,
+            "dimensions": {
+                k: {
+                    "code": v.code,
+                    "name": v.name,
+                    "priority_tier": v.priority_tier,
+                    "rating": v.rating,
+                    "confidence": v.confidence,
+                    "summary": v.summary,
+                    "issues": v.issues,
+                    "fixes": v.fixes,
+                    "highlight_targets": getattr(v, 'highlight_targets', []),
+                }
+                for k, v in sorted_dims.items()
+            },
+            "resume_text": resume_text,
+            "resume_markdown": resume_markdown,
+            "resume_filename": resume_filename,
+            "rewrites": report.rewrites,
+            "priority_fixes": report.priority_fixes,
+            "tier": report.tier,
+            "verdict": report.verdict,
+        }
+
+        if target_country != "germany":
+            country_label = target_country.title()
+            not_present_reason = (
+                f"Approbation is a German-specific credential and does not apply to the {country_label} job market. "
+                f"This dimension is rated Great because no German medical license is required."
+            )
+            for dim_key in ("legal_eligibility_status",):
+                if dim_key in report_dict.get("dimensions", {}):
+                    report_dict["dimensions"][dim_key]["rating"] = "Great"
+                    report_dict["dimensions"][dim_key]["summary"] = not_present_reason
+                    report_dict["dimensions"][dim_key]["issues"] = []
+                    report_dict["dimensions"][dim_key]["fixes"] = []
+                for g in report_dict.get("dimension_groups", {}).values():
+                    if dim_key in g.get("dimensions", {}):
+                        g["dimensions"][dim_key]["rating"] = "Great"
+                        g["dimensions"][dim_key]["summary"] = not_present_reason
+                        g["dimensions"][dim_key]["issues"] = []
+                        g["dimensions"][dim_key]["fixes"] = []
+
+        full_name = _extract_name_from_report(report_dict, resume_text, resume_filename)
+
+        now = datetime.now(timezone.utc)
+        folder_path = safe_save_to_folder(
+            resume_markdown, full_name, seniority, created_at=now
+        )
+
+        entry = TalentPoolEntry(
+            full_name=full_name,
+            seniority_declared=seniority,
+            seniority_detected=report.seniority_check.detected_level,
+            seniority_match=report.seniority_check.status,
+            tier=report.tier,
+            original_filename=resume_filename,
+            folder_path=folder_path,
+            resume_text=resume_text,
+            resume_markdown=resume_markdown,
+            analysis_json=json.dumps(report_dict),
+            priority_fixes_json=json.dumps(report.priority_fixes),
+            verdict=report.verdict,
+            target_country=target_country,
+            referral_source=referral_source or None,
+        )
+        session.add(entry)
+        await session.commit()
+        await session.refresh(entry)
+
+        logger.info(f"Saved candidate #{entry.id}: {full_name} ({seniority})")
+
+        result_data = json.dumps({"id": entry.id, "analysis": report_dict})
+        yield f"event: result\ndata: {result_data}\n\n"
+
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 def _verify_admin_key(x_admin_key: str = Header(None)):
@@ -442,49 +612,10 @@ async def get_candidate(
         "original_filename": entry.original_filename,
         "folder_path": entry.folder_path,
         "created_at": entry.created_at.isoformat() if entry.created_at else None,
+        "resume_text": entry.resume_text,
+        "resume_markdown": entry.resume_markdown,
         "analysis": analysis,
     }
-
-
-@app.get("/admin/candidates/{candidate_id}/download")
-async def download_candidate_cv(
-    candidate_id: int,
-    admin_key: str = Depends(_verify_admin_key),
-    session: AsyncSession = Depends(get_session),
-):
-    result = await session.execute(
-        select(TalentPoolEntry).where(TalentPoolEntry.id == candidate_id)
-    )
-    entry = result.scalar_one_or_none()
-    if not entry:
-        raise HTTPException(status_code=404, detail="Candidate not found")
-
-    safe_name = entry.full_name.replace(" ", "_").replace("/", "_")
-    return StreamingResponse(
-        iter([entry.file_blob]),
-        media_type=entry.file_mimetype,
-        headers={"Content-Disposition": f'attachment; filename="{safe_name}_cv{Path(entry.original_filename).suffix}"'},
-    )
-
-
-@app.get("/cv/{candidate_id}")
-async def serve_cv_file(
-    candidate_id: int,
-    admin_key: str = Depends(_verify_admin_key),
-    session: AsyncSession = Depends(get_session),
-):
-    result = await session.execute(
-        select(TalentPoolEntry).where(TalentPoolEntry.id == candidate_id)
-    )
-    entry = result.scalar_one_or_none()
-    if not entry:
-        raise HTTPException(status_code=404, detail="Candidate not found")
-
-    return StreamingResponse(
-        iter([entry.file_blob]),
-        media_type=entry.file_mimetype,
-        headers={"Content-Disposition": f'inline; filename="{entry.original_filename}"'},
-    )
 
 
 @app.get("/cv/{candidate_id}/download/md")

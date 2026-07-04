@@ -1,5 +1,5 @@
 from datetime import datetime, timezone
-from sqlalchemy import Column, String, Integer, DateTime, LargeBinary, Text, text
+from sqlalchemy import Column, String, Integer, DateTime, Text, text
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 from sqlalchemy.orm import DeclarativeBase
 from backend.utils.log import logger
@@ -21,8 +21,6 @@ class TalentPoolEntry(Base):
     seniority_match     = Column(String(10), nullable=True)
     tier                = Column(String(20), nullable=True)
     original_filename   = Column(String(300), nullable=False)
-    file_mimetype       = Column(String(100), nullable=False)
-    file_blob           = Column(LargeBinary, nullable=False)
     folder_path         = Column(String(500), nullable=True)
     resume_text         = Column(Text, nullable=True)
     resume_markdown     = Column(Text, nullable=True)

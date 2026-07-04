@@ -21,9 +21,7 @@ export const parseResume = async (file, turnstileToken) => {
 export const analyzeResume = async (params, turnstileToken) => {
   const formData = new FormData()
   for (const [key, val] of Object.entries(params)) {
-    if (key === 'file') {
-      if (val) formData.append('file', val)
-    } else if (val !== undefined && val !== null) {
+    if (val !== undefined && val !== null) {
       formData.append(key, typeof val === 'object' ? JSON.stringify(val) : val)
     }
   }
@@ -59,10 +57,63 @@ export const getStats = async (key) => {
   return response.data
 }
 
-export const downloadCV = async (key, id) => {
-  const response = await api.get(`/admin/candidates/${id}/download`, {
-    headers: { 'x-admin-key': key },
-    responseType: 'blob',
+export const analyzeResumeStream = async (params, { onStep, onResult, onError }) => {
+  const formData = new FormData()
+  for (const [key, val] of Object.entries(params)) {
+    if (val !== undefined && val !== null) {
+      formData.append(key, typeof val === 'object' ? JSON.stringify(val) : val)
+    }
+  }
+  const headers = {}
+  const apiKey = import.meta.env.VITE_ANALYSIS_API_KEY
+  if (apiKey) headers['x-api-key'] = apiKey
+
+  const baseUrl = import.meta.env.PROD ? '' : '/api'
+  const response = await fetch(`${baseUrl}/analyze/stream`, {
+    method: 'POST',
+    body: formData,
+    headers,
   })
-  return response
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ detail: 'Analysis failed' }))
+    onError(error.detail || 'Analysis failed')
+    return
+  }
+
+  const reader = response.body.getReader()
+  const decoder = new TextDecoder()
+  let buffer = ''
+
+  while (true) {
+    const { done, value } = await reader.read()
+    if (done) break
+
+    buffer += decoder.decode(value, { stream: true })
+    const lines = buffer.split('\n')
+    buffer = lines.pop()
+
+    let eventType = ''
+    for (const line of lines) {
+      if (line.startsWith('event: ')) {
+        eventType = line.slice(7)
+      } else if (line.startsWith('data: ')) {
+        const data = line.slice(6)
+        try {
+          const parsed = JSON.parse(data)
+          if (eventType === 'step') {
+            onStep(parsed)
+          } else if (eventType === 'result') {
+            onResult(parsed)
+          } else if (eventType === 'error') {
+            onError(parsed.detail)
+          }
+        } catch (e) {
+          // skip malformed events
+        }
+      }
+    }
+  }
 }
+
+

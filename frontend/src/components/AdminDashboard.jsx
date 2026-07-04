@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react'
-import { getCandidates, getCandidate, downloadCV, getStats } from '../api/client.js'
+import { getCandidates, getCandidate, getStats } from '../api/client.js'
 import SubsectionCard from './SubsectionCard.jsx'
+import CVPreviewPanel from './CVPreviewPanel.jsx'
+import GroupTabs from './GroupTabs.jsx'
 
 const TIER_CONFIG = {
   'Needs Work': { color: '#ef4444', bg: '#fef2f2' },
@@ -10,6 +12,8 @@ const TIER_CONFIG = {
   'Top 10%': { color: '#3b82f6', bg: '#eff6ff' },
 }
 
+const GROUP_ORDER = ['content', 'layout', 'red_flags', 'readability']
+
 function AdminDashboard({ adminKey, onLogout }) {
   const [candidates, setCandidates] = useState([])
   const [stats, setStats] = useState(null)
@@ -18,6 +22,9 @@ function AdminDashboard({ adminKey, onLogout }) {
   const [loading, setLoading] = useState(true)
   const [detailLoading, setDetailLoading] = useState(false)
   const [error, setError] = useState('')
+  const [activeGroup, setActiveGroup] = useState('content')
+  const [expandedSub, setExpandedSub] = useState(null)
+  const [localMarkdown, setLocalMarkdown] = useState('')
 
   useEffect(() => {
     loadCandidates()
@@ -50,29 +57,16 @@ function AdminDashboard({ adminKey, onLogout }) {
     setSelected(id)
     setDetailLoading(true)
     setError('')
+    setActiveGroup('content')
+    setExpandedSub(null)
     try {
       const data = await getCandidate(adminKey, id)
       setDetail(data)
+      setLocalMarkdown(data.resume_markdown || '')
     } catch (err) {
       setError(err.response?.data?.detail || 'Failed to load candidate')
     } finally {
       setDetailLoading(false)
-    }
-  }
-
-  const handleDownload = async (id, filename) => {
-    try {
-      const response = await downloadCV(adminKey, id)
-      const url = window.URL.createObjectURL(new Blob([response.data]))
-      const link = document.createElement('a')
-      link.href = url
-      link.setAttribute('download', filename)
-      document.body.appendChild(link)
-      link.click()
-      link.remove()
-      window.URL.revokeObjectURL(url)
-    } catch (err) {
-      setError('Download failed')
     }
   }
 
@@ -81,97 +75,101 @@ function AdminDashboard({ adminKey, onLogout }) {
     setDetail(null)
   }
 
+  const handleSubsectionToggle = (groupKey, dimKey) => {
+    if (expandedSub?.dimKey === dimKey) {
+      setExpandedSub(null)
+    } else {
+      setExpandedSub({ groupKey, dimKey })
+    }
+  }
+
   if (selected && detail) {
     const analysis = detail.analysis || {}
     const tierConfig = TIER_CONFIG[analysis.tier] || TIER_CONFIG['Competitive']
+    const { dimension_groups, tier, verdict, header, priority_fixes } = analysis
+    const candidateName = header?.candidate_name || detail.name || 'Candidate'
 
     return (
-      <div className="admin-dashboard">
+      <div className="admin-dashboard admin-detail-view">
         <div className="admin-header">
           <button className="btn-back" onClick={goBack}>&larr; Back to list</button>
-          <button className="btn-logout" onClick={onLogout}>Logout</button>
+          <div className="admin-header-actions">
+            <span className="candidate-count">{detail.name}</span>
+            <button className="btn-logout" onClick={onLogout}>Logout</button>
+          </div>
         </div>
 
-        <div className="candidate-detail">
-          <div className="detail-header">
-            <div className="tier-badge" style={{ backgroundColor: tierConfig.bg, color: tierConfig.color, borderColor: tierConfig.color }}>
-              {analysis.tier || 'N/A'}
-            </div>
-            <h2>{detail.name || 'Candidate'}</h2>
-            <div className="detail-meta">
-              <span>Seniority: {detail.seniority_declared}</span>
-              <span>Detected: {detail.seniority_detected || 'N/A'}</span>
-              <span>Match: {detail.seniority_match || 'N/A'}</span>
-              <span>Date: {detail.created_at ? new Date(detail.created_at).toLocaleDateString() : 'N/A'}</span>
-            </div>
-            <button
-              className="btn-download"
-              onClick={() => handleDownload(detail.id, detail.original_filename)}
-            >
-              Download CV
-            </button>
-          </div>
-
-          {analysis.verdict && (
-            <div className="verdict-section">
-              <h3>Verdict</h3>
-              <p>{analysis.verdict}</p>
-            </div>
-          )}
-
-          {analysis.priority_fixes && analysis.priority_fixes.length > 0 && (
-            <div className="priority-fixes">
-              <h3>Priority Fixes</h3>
-              <ol>
-                {analysis.priority_fixes.map((fix, i) => (
-                  <li key={i}>
-                    {fix.dimension_name && <span className="fix-dim">{fix.dimension_name}</span>}
-                    {fix.fix || fix}
-                  </li>
-                ))}
-              </ol>
-            </div>
-          )}
-
-          {analysis.rewrites && analysis.rewrites.length > 0 && (
-            <div className="rewrites-section">
-              <h3>Suggested Rewrites</h3>
-              {analysis.rewrites.map((rewrite, i) => (
-                <div key={i} className="rewrite-card">
-                  <div className="rewrite-original">
-                    <span className="rewrite-label">Original:</span>
-                    <p>{rewrite.original}</p>
-                  </div>
-                  <div className="rewrite-improved">
-                    <span className="rewrite-label">Improved:</span>
-                    <p>{rewrite.rewritten}</p>
-                  </div>
+        <div className="split-content" style={{ height: 'calc(100vh - 120px)' }}>
+          <div className="analysis-panel">
+            <div className="analysis-top-bar">
+              <div className="candidate-info">
+                <h2>{candidateName}</h2>
+                <div className="header-tags">
+                  {header?.cv_language && <span className="tag">{header.cv_language}</span>}
+                  {header?.page_count > 0 && <span className="tag">{header.page_count}p</span>}
+                  {header?.declared_seniority && <span className="tag">{header.declared_seniority}</span>}
+                  {header?.detected_specialty && <span className="tag">{header.detected_specialty}</span>}
+                  <span className="tag">Seniority: {detail.seniority_declared}</span>
+                  {detail.seniority_detected && <span className="tag">Detected: {detail.seniority_detected}</span>}
+                  {detail.created_at && <span className="tag">{new Date(detail.created_at).toLocaleDateString()}</span>}
                 </div>
-              ))}
-            </div>
-          )}
+              </div>
+              <div className="tier-verdict">
+                <span className={`tier-badge tier-${(tier || '').toLowerCase().replace(/\s+/g, '-').replace('%', '')}`}>{tier}</span>
+                {verdict && <p className="verdict-text">{verdict}</p>}
+              </div>
 
-          {analysis.dimension_groups ? (
-            Object.entries(analysis.dimension_groups).map(([groupKey, group]) => (
-              <div key={groupKey} className="dimensions-section">
-                <h3>{group.icon} {group.label}</h3>
-                <div className="analysis-list" style={{ padding: 0 }}>
-                  {Object.entries(group.dimensions || {}).map(([key, dim]) => (
-                    <SubsectionCard key={key} dimKey={key} data={dim} isExpanded={false} isHighPriority={false} onToggle={() => {}} />
+              {priority_fixes && priority_fixes.length > 0 && (
+                <div className="priority-fixes">
+                  <h3>Priority Fixes</h3>
+                  <ol>
+                    {priority_fixes.map((fix, i) => (
+                      <li key={i}>
+                        {fix.dimension_name && <span className="fix-dim">{fix.dimension_name}</span>}
+                        {fix.fix || fix}
+                      </li>
+                    ))}
+                  </ol>
+                </div>
+              )}
+            </div>
+
+            {dimension_groups && (
+              <GroupTabs
+                groups={dimension_groups}
+                groupOrder={GROUP_ORDER}
+                activeGroup={activeGroup}
+                onTabChange={(g) => { setActiveGroup(g); setExpandedSub(null) }}
+              />
+            )}
+
+            <div className="analysis-body">
+              {dimension_groups && (
+                <div className="analysis-list">
+                  {Object.entries(dimension_groups[activeGroup]?.dimensions || {}).map(([key, dim]) => (
+                    <SubsectionCard
+                      key={key}
+                      dimKey={key}
+                      data={dim}
+                      isExpanded={expandedSub?.dimKey === key}
+                      isHighPriority={false}
+                      onToggle={() => handleSubsectionToggle(activeGroup, key)}
+                    />
                   ))}
                 </div>
-              </div>
-            ))
-          ) : analysis.dimensions ? (
-            <div className="dimensions-section">
-              <h3>Dimension Analysis</h3>
-              <div className="analysis-list" style={{ padding: 0 }}>
-                {Object.entries(analysis.dimensions).map(([key, dim]) => (
-                  <SubsectionCard key={key} dimKey={key} data={dim} isExpanded={false} isHighPriority={false} onToggle={() => {}} />
-                ))}
-              </div>
+              )}
             </div>
-          ) : null}
+          </div>
+
+          <div className="cv-preview-panel">
+            <CVPreviewPanel
+              resumeText={detail.resume_text}
+              resumeMarkdown={localMarkdown}
+              resumeFilename={detail.original_filename}
+              candidateId={detail.id}
+              onUpdateMarkdown={setLocalMarkdown}
+            />
+          </div>
         </div>
       </div>
     )

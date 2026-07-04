@@ -78,9 +78,7 @@ function Questionnaire({ onComplete, onStepAnswer, onSeeResults, answers }) {
       <div className="questionnaire-progress">
         <div className="progress-bar" style={{ width: `${progress}%` }} />
       </div>
-      <div className="questionnaire-step-indicator">
-        Step {step + 1} of {STEPS.length}
-      </div>
+      <div className="questionnaire-progress-label">{Math.round(progress)}%</div>
 
       <div className="questionnaire-content">
         <h2>{current.title}</h2>
