@@ -18,7 +18,7 @@ function LoadingScreen() {
         if (prev >= steps.length - 1) return prev
         return prev + 1
       })
-    }, 4000)
+    }, 2500)
     return () => clearInterval(interval)
   }, [])
 
