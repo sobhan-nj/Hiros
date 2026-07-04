@@ -132,6 +132,7 @@ function App() {
     <div className="app">
       <header className="app-header">
         <h1 onClick={handleReset} style={{ cursor: 'pointer' }}>CV Analyzer</h1>
+        <p className="subtitle">Find your CV flaws before the recruiter does</p>
       </header>
 
       <main className="app-main">
