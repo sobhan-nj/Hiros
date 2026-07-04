@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react'
 
 const steps = [
-  { label: 'Parsing your resume' },
-  { label: 'Extracting keywords' },
-  { label: 'Analyzing your experience' },
-  { label: 'Extracting your skills' },
-  { label: 'Generating recommendations' },
+  { label: 'Parsing your resume', delay: 1200 },
+  { label: 'Extracting keywords', delay: 1800 },
+  { label: 'Analyzing your experience', delay: 2200 },
+  { label: 'Extracting your skills', delay: 1500 },
+  { label: 'Generating recommendations', delay: 2000 },
   { label: 'Building your report' },
 ]
 
@@ -13,17 +13,16 @@ function LoadingScreen({ analysisDone }) {
   const [currentStep, setCurrentStep] = useState(0)
 
   useEffect(() => {
-    if (analysisDone) {
-      setCurrentStep(steps.length)
-      return
-    }
-    const interval = setInterval(() => {
-      setCurrentStep((prev) => {
-        if (prev >= steps.length - 2) return prev
-        return prev + 1
-      })
-    }, 1500)
-    return () => clearInterval(interval)
+    if (analysisDone || currentStep >= steps.length - 1) return
+    const delay = steps[currentStep].delay
+    const timer = setTimeout(() => {
+      setCurrentStep((prev) => prev + 1)
+    }, delay)
+    return () => clearTimeout(timer)
+  }, [currentStep, analysisDone])
+
+  useEffect(() => {
+    if (analysisDone) setCurrentStep(steps.length)
   }, [analysisDone])
 
   const displayStep = analysisDone ? steps.length : currentStep
