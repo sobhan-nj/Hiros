@@ -1,33 +1,39 @@
 import React, { useState, useEffect } from 'react'
 
 const steps = [
-  { label: 'Parsing your resume', icon: '📄' },
-  { label: 'Extracting keywords', icon: '🔑' },
-  { label: 'Analyzing your experience', icon: '📋' },
-  { label: 'Extracting your skills', icon: '💡' },
-  { label: 'Generating recommendations', icon: '✨' },
-  { label: 'Building your report', icon: '📊' },
+  { label: 'Parsing your resume' },
+  { label: 'Extracting keywords' },
+  { label: 'Analyzing your experience' },
+  { label: 'Extracting your skills' },
+  { label: 'Generating recommendations' },
+  { label: 'Building your report' },
 ]
 
-function LoadingScreen() {
+function LoadingScreen({ analysisDone }) {
   const [currentStep, setCurrentStep] = useState(0)
 
   useEffect(() => {
+    if (analysisDone) {
+      setCurrentStep(steps.length)
+      return
+    }
     const interval = setInterval(() => {
       setCurrentStep((prev) => {
-        if (prev >= steps.length - 1) return prev
+        if (prev >= steps.length - 2) return prev
         return prev + 1
       })
     }, 1500)
     return () => clearInterval(interval)
-  }, [])
+  }, [analysisDone])
+
+  const displayStep = analysisDone ? steps.length : currentStep
 
   return (
     <div className="loading-screen">
       <h2 className="loading-title">Analyzing Your Resume</h2>
       <div className="loading-steps">
         {steps.map((step, i) => {
-          const status = i < currentStep ? 'done' : i === currentStep ? 'active' : 'pending'
+          const status = i < displayStep ? 'done' : i === displayStep && !analysisDone ? 'active' : 'pending'
           return (
             <div key={i} className={`loading-step-item ${status}`}>
               <div className="loading-step-icon">
@@ -44,7 +50,7 @@ function LoadingScreen() {
           )
         })}
       </div>
-      <p className="loading-hint">This may take 30-60 seconds</p>
+      {!analysisDone && <p className="loading-hint">This may take 30-60 seconds</p>}
     </div>
   )
 }

@@ -156,7 +156,7 @@ function App() {
         )}
 
         {screen === 'loading' && (
-          <LoadingScreen step={loadingStep} />
+          <LoadingScreen analysisDone={analysisDone} />
         )}
 
         {screen === 'results' && analysisResult && (
