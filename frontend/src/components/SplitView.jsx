@@ -80,7 +80,7 @@ function SplitView({ results, onReset }) {
           </div>
 
           <button className="btn-reset" onClick={onReset}>
-            Analyze Another
+            Try another resume
           </button>
         </div>
 
