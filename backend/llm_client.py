@@ -102,23 +102,44 @@ async def _call_gemini(system_prompt: str, user_message: str, max_tokens: int) -
 
 async def _call_gemini_structured(system_prompt: str, user_message: str, response_model, max_tokens: int):
     """Gemini doesn't support native structured outputs — use generate + parse."""
-    raw = await _call_gemini(system_prompt, user_message, max_tokens)
+    # Add JSON schema to the prompt so Gemini returns the correct structure
+    schema_instruction = (
+        f"\n\nYou MUST respond with a single valid JSON object matching this exact schema. "
+        f"No markdown, no explanation, just the raw JSON object.\n"
+        f"Schema: {response_model.model_json_schema()}"
+    )
+    raw = await _call_gemini(system_prompt + schema_instruction, user_message, max_tokens)
     import json, re
 
-    # Strip markdown code blocks
-    cleaned = re.sub(r"```json\s*|```\s*", "", raw).strip()
+    # Strip markdown code blocks (handles ```json ... ``` and ``` ... ```)
+    cleaned = re.sub(r"```(?:json)?\s*", "", raw)
+    cleaned = re.sub(r"```\s*$", "", cleaned, flags=re.MULTILINE)
+    cleaned = cleaned.strip()
 
     # Try to extract JSON by finding balanced braces
     def extract_json(text):
-        # Find first { and match balanced braces
         start = text.find('{')
         if start == -1:
             return None
         depth = 0
+        in_string = False
+        escape = False
         for i in range(start, len(text)):
-            if text[i] == '{':
+            c = text[i]
+            if escape:
+                escape = False
+                continue
+            if c == '\\' and in_string:
+                escape = True
+                continue
+            if c == '"' and not escape:
+                in_string = not in_string
+                continue
+            if in_string:
+                continue
+            if c == '{':
                 depth += 1
-            elif text[i] == '}':
+            elif c == '}':
                 depth -= 1
                 if depth == 0:
                     return text[start:i+1]
@@ -132,19 +153,17 @@ async def _call_gemini_structured(system_prompt: str, user_message: str, respons
         json_str = extract_json(cleaned)
         if json_str:
             # Fix common JSON issues
-            json_str = re.sub(r',\s*}', '}', json_str)  # trailing commas
-            json_str = re.sub(r',\s*]', ']', json_str)  # trailing commas in arrays
+            json_str = re.sub(r',\s*}', '}', json_str)
+            json_str = re.sub(r',\s*]', ']', json_str)
             try:
                 data = json.loads(json_str)
             except json.JSONDecodeError:
-                # Last resort: try from the end
-                json_str = extract_json(cleaned[::-1].replace('}', 'B', 1).replace('{', 'B', 1)[::-1].replace('B', ''))
-                if json_str:
-                    data = json.loads(json_str)
-                else:
-                    raise ValueError(f"Failed to parse JSON from Gemini response: {raw[:500]}")
+                raise ValueError(f"Failed to parse JSON from Gemini response: {raw[:800]}")
         else:
-            raise ValueError(f"Failed to parse JSON from Gemini response: {raw[:500]}")
+            raise ValueError(f"Failed to extract JSON from Gemini response: {raw[:800]}")
+
+    # Log the parsed structure for debugging
+    logger.debug(f"Gemini response keys: {list(data.keys()) if isinstance(data, dict) else type(data)}")
 
     return response_model.model_validate(data)
 
