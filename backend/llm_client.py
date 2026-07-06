@@ -1,9 +1,35 @@
 import asyncio
+import random
 from backend.utils.log import logger
 from backend import config
 
 _gemini_cached_content = None
 _gemini_cache_lock = asyncio.Lock()
+
+# Retry configuration
+MAX_RETRIES = 3
+BASE_DELAY = 2  # seconds
+MAX_DELAY = 30  # seconds
+
+
+async def _retry_with_backoff(func, *args, **kwargs):
+    """Execute function with exponential backoff retry logic."""
+    last_exception = None
+    for attempt in range(MAX_RETRIES + 1):
+        try:
+            return await func(*args, **kwargs)
+        except (TimeoutError, ConnectionError, OSError) as e:
+            last_exception = e
+            if attempt == MAX_RETRIES:
+                break
+            # Exponential backoff with jitter
+            delay = min(BASE_DELAY * (2 ** attempt) + random.uniform(0, 1), MAX_DELAY)
+            logger.warning(f"Attempt {attempt + 1}/{MAX_RETRIES + 1} failed: {e}. Retrying in {delay:.1f}s...")
+            await asyncio.sleep(delay)
+        except Exception as e:
+            # Don't retry on non-transient errors
+            raise
+    raise last_exception
 
 
 async def generate(system_prompt: str, user_message: str, max_tokens: int = 4096) -> str:
@@ -61,29 +87,65 @@ async def _call_gemini(system_prompt: str, user_message: str, max_tokens: int) -
     else:
         model = genai.GenerativeModel(config.LLM_MODEL, system_instruction=system_prompt)
 
-    response = await model.generate_content_async(
-        user_message,
-        generation_config=genai.types.GenerationConfig(
-            max_output_tokens=max_tokens,
-            temperature=0.2,
-        ),
-    )
-    return response.text or ""
+    async def _make_request():
+        response = await model.generate_content_async(
+            user_message,
+            generation_config=genai.types.GenerationConfig(
+                max_output_tokens=max_tokens,
+                temperature=0.2,
+            ),
+        )
+        return response.text or ""
+
+    return await _retry_with_backoff(_make_request)
 
 
 async def _call_gemini_structured(system_prompt: str, user_message: str, response_model, max_tokens: int):
     """Gemini doesn't support native structured outputs — use generate + parse."""
     raw = await _call_gemini(system_prompt, user_message, max_tokens)
     import json, re
+
+    # Strip markdown code blocks
     cleaned = re.sub(r"```json\s*|```\s*", "", raw).strip()
+
+    # Try to extract JSON by finding balanced braces
+    def extract_json(text):
+        # Find first { and match balanced braces
+        start = text.find('{')
+        if start == -1:
+            return None
+        depth = 0
+        for i in range(start, len(text)):
+            if text[i] == '{':
+                depth += 1
+            elif text[i] == '}':
+                depth -= 1
+                if depth == 0:
+                    return text[start:i+1]
+        return None
+
+    # Try direct parse first
     try:
         data = json.loads(cleaned)
     except json.JSONDecodeError:
-        match = re.search(r'\{.*\}', cleaned, re.DOTALL)
-        if match:
-            data = json.loads(match.group())
+        # Try extracting balanced JSON
+        json_str = extract_json(cleaned)
+        if json_str:
+            # Fix common JSON issues
+            json_str = re.sub(r',\s*}', '}', json_str)  # trailing commas
+            json_str = re.sub(r',\s*]', ']', json_str)  # trailing commas in arrays
+            try:
+                data = json.loads(json_str)
+            except json.JSONDecodeError:
+                # Last resort: try from the end
+                json_str = extract_json(cleaned[::-1].replace('}', 'B', 1).replace('{', 'B', 1)[::-1].replace('B', ''))
+                if json_str:
+                    data = json.loads(json_str)
+                else:
+                    raise ValueError(f"Failed to parse JSON from Gemini response: {raw[:500]}")
         else:
             raise ValueError(f"Failed to parse JSON from Gemini response: {raw[:500]}")
+
     return response_model.model_validate(data)
 
 
@@ -100,16 +162,20 @@ async def _call_openai_compatible(system_prompt: str, user_message: str, max_tok
         api_key = config.OPENAI_API_KEY
         base_url = None
     client = AsyncOpenAI(api_key=api_key, base_url=base_url, timeout=300)
-    response = await client.chat.completions.create(
-        model=config.LLM_MODEL,
-        messages=[
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_message},
-        ],
-        max_tokens=max_tokens,
-        temperature=0.2,
-    )
-    return response.choices[0].message.content or ""
+
+    async def _make_request():
+        response = await client.chat.completions.create(
+            model=config.LLM_MODEL,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_message},
+            ],
+            max_tokens=max_tokens,
+            temperature=0.2,
+        )
+        return response.choices[0].message.content or ""
+
+    return await _retry_with_backoff(_make_request)
 
 
 async def _call_openai_structured(system_prompt: str, user_message: str, response_model, max_tokens: int):
@@ -131,19 +197,22 @@ async def _call_openai_structured(system_prompt: str, user_message: str, respons
     # Try native structured output first
     if hasattr(client, 'beta') and hasattr(getattr(client, 'beta', None), 'chat'):
         try:
-            completion = await client.beta.chat.completions.parse(
-                model=config.LLM_MODEL,
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_message},
-                ],
-                response_format=response_model,
-                max_tokens=max_tokens,
-                temperature=0.2,
-            )
-            parsed = completion.choices[0].message.parsed
-            if parsed is not None:
-                return parsed
+            async def _try_structured():
+                completion = await client.beta.chat.completions.parse(
+                    model=config.LLM_MODEL,
+                    messages=[
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": user_message},
+                    ],
+                    response_format=response_model,
+                    max_tokens=max_tokens,
+                    temperature=0.2,
+                )
+                parsed = completion.choices[0].message.parsed
+                if parsed is not None:
+                    return parsed
+                raise ValueError("No parsed response")
+            return await _retry_with_backoff(_try_structured)
         except Exception as e:
             logger.warning(f"Structured output via beta.parse failed, falling back: {e}")
 
@@ -159,16 +228,20 @@ async def _call_openai_with_json_fallback(client, system_prompt: str, user_messa
         f"No markdown, no explanation, just the raw JSON object.\n"
         f"Schema: {response_model.model_json_schema()}"
     )
-    completion = await client.chat.completions.create(
-        model=config.LLM_MODEL,
-        messages=[
-            {"role": "system", "content": system_prompt + json_instruction},
-            {"role": "user", "content": user_message},
-        ],
-        max_tokens=max_tokens,
-        temperature=0.2,
-    )
-    raw = completion.choices[0].message.content or ""
+
+    async def _make_request():
+        completion = await client.chat.completions.create(
+            model=config.LLM_MODEL,
+            messages=[
+                {"role": "system", "content": system_prompt + json_instruction},
+                {"role": "user", "content": user_message},
+            ],
+            max_tokens=max_tokens,
+            temperature=0.2,
+        )
+        return completion.choices[0].message.content or ""
+
+    raw = await _retry_with_backoff(_make_request)
     cleaned = re.sub(r"```json\s*|```\s*", "", raw).strip()
     try:
         data = json.loads(cleaned)
@@ -184,19 +257,23 @@ async def _call_openai_with_json_fallback(client, system_prompt: str, user_messa
 async def _call_anthropic(system_prompt: str, user_message: str, max_tokens: int) -> str:
     import anthropic
     client = anthropic.AsyncAnthropic(api_key=config.ANTHROPIC_API_KEY)
-    message = await client.messages.create(
-        model=config.LLM_MODEL,
-        max_tokens=max_tokens,
-        system=[
-            {
-                "type": "text",
-                "text": system_prompt,
-                "cache_control": {"type": "ephemeral"},
-            }
-        ],
-        messages=[{"role": "user", "content": user_message}],
-    )
-    return message.content[0].text
+
+    async def _make_request():
+        message = await client.messages.create(
+            model=config.LLM_MODEL,
+            max_tokens=max_tokens,
+            system=[
+                {
+                    "type": "text",
+                    "text": system_prompt,
+                    "cache_control": {"type": "ephemeral"},
+                }
+            ],
+            messages=[{"role": "user", "content": user_message}],
+        )
+        return message.content[0].text
+
+    return await _retry_with_backoff(_make_request)
 
 
 async def _call_anthropic_structured(system_prompt: str, user_message: str, response_model, max_tokens: int):
