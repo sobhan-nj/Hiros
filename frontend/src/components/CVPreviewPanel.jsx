@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react'
+import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import { marked } from 'marked'
 import TurndownService from 'turndown'
 
@@ -15,7 +15,7 @@ function CVPreviewPanel({ resumeText, resumeMarkdown, resumeFilename, candidateI
   const editorRef = useRef(null)
 
   const markdownSource = resumeMarkdown || resumeText || ''
-  const renderedHtml = marked.parse(markdownSource)
+  const renderedHtml = useMemo(() => marked.parse(markdownSource), [markdownSource])
 
   useEffect(() => {
     if (isEditing && editorRef.current) {
@@ -25,6 +25,7 @@ function CVPreviewPanel({ resumeText, resumeMarkdown, resumeFilename, candidateI
   }, [isEditing])
 
   useEffect(() => {
+    if (!showMenu) return
     const handleClickOutside = (e) => {
       if (menuRef.current && !menuRef.current.contains(e.target)) {
         setShowMenu(false)
@@ -32,7 +33,7 @@ function CVPreviewPanel({ resumeText, resumeMarkdown, resumeFilename, candidateI
     }
     document.addEventListener('mousedown', handleClickOutside)
     return () => document.removeEventListener('mousedown', handleClickOutside)
-  }, [])
+  }, [showMenu])
 
   const handleEdit = useCallback(() => {
     setIsEditing(true)

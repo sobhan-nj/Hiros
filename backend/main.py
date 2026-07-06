@@ -5,6 +5,8 @@ import sentry_sdk
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from string import Template
+import markdown as md_lib
 
 from fastapi import FastAPI, Request, UploadFile, File, Form, Header, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
@@ -13,7 +15,7 @@ from slowapi import Limiter
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
-from sqlalchemy import select, text
+from sqlalchemy import select, text, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.utils.log import logger
@@ -504,8 +506,6 @@ async def get_stats(
     admin_key: str = Depends(_verify_admin_key),
     session: AsyncSession = Depends(get_session),
 ):
-    from sqlalchemy import func
-
     total = await session.scalar(select(func.count(TalentPoolEntry.id)))
 
     tier_rows = await session.execute(
@@ -664,8 +664,6 @@ async def download_cv_latex(
 
 def markdown_to_latex(md_text: str) -> str:
     """Convert resume markdown to a clean LaTeX document."""
-    import re
-
     lines = md_text.split('\n')
     latex_lines = []
     in_itemize = False
@@ -848,10 +846,8 @@ async def download_cv_html(
 
     md_text = entry.resume_markdown or entry.resume_text or ""
 
-    import markdown as md_lib
     html_body = md_lib.markdown(md_text, extensions=["extra", "sane_lists"])
 
-    from string import Template
     html_content = Template(HTML_TEMPLATE).safe_substitute(name=entry.full_name, content=html_body)
     safe_name = entry.full_name.replace(" ", "_").replace("/", "_")
     return StreamingResponse(
