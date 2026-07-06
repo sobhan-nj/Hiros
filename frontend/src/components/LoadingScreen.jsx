@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react'
 
 const steps = [
-  { label: 'Parsing your resume', delay: 1200 },
-  { label: 'Extracting keywords', delay: 1800 },
-  { label: 'Analyzing your experience', delay: 2200 },
-  { label: 'Extracting your skills', delay: 1500 },
-  { label: 'Generating recommendations', delay: 2000 },
+  { label: 'Parsing your resume', delay: 2500 },
+  { label: 'Extracting keywords', delay: 3500 },
+  { label: 'Analyzing your experience', delay: 5000 },
+  { label: 'Extracting your skills', delay: 4000 },
+  { label: 'Generating recommendations', delay: 5000 },
   { label: 'Building your report' },
 ]
 
