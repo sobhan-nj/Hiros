@@ -149,10 +149,9 @@ function App() {
           <Questionnaire
             onComplete={handleQuestionnaireComplete}
             onStepAnswer={handleStepAnswer}
-            analyzing={analyzing}
-            analysisDone={analysisDone}
             onSeeResults={handleSeeResults}
             answers={answers}
+            analyzing={analyzing}
           />
         )}
 

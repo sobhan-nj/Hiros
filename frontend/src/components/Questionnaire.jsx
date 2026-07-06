@@ -42,7 +42,7 @@ const STEPS = [
   },
 ]
 
-function Questionnaire({ onComplete, onStepAnswer, onSeeResults, answers }) {
+function Questionnaire({ onComplete, onStepAnswer, onSeeResults, answers, analyzing }) {
   const [step, setStep] = React.useState(0)
   const [localSelection, setLocalSelection] = React.useState(null)
 
@@ -79,6 +79,12 @@ function Questionnaire({ onComplete, onStepAnswer, onSeeResults, answers }) {
         <div className="progress-bar" style={{ width: `${progress}%` }} />
       </div>
       <div className="questionnaire-progress-label">{Math.round(progress)}%</div>
+      {analyzing && step > 0 && (
+        <div className="analysis-indicator">
+          <span className="analysis-indicator-dot" />
+          Analysis in progress...
+        </div>
+      )}
 
       <div className="questionnaire-content">
         <h2>{current.title}</h2>
