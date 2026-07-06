@@ -73,7 +73,7 @@ async def analyze_resume(resume_text, raw_keywords, seniority):
 
     try:
         py_report = await llm_client.generate_structured(
-            system_prompt, user_message, PydanticReport, max_tokens=8192
+            system_prompt, user_message, PydanticReport, max_tokens=16384
         )
     except Exception as e:
         logger.error(f"LLM call failed: {e}")
