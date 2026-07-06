@@ -10,6 +10,7 @@ function SplitView({ results, onReset }) {
   const [activeGroup, setActiveGroup] = useState('content')
   const [expandedSub, setExpandedSub] = useState(null)
   const [localMarkdown, setLocalMarkdown] = useState(analysis.resume_markdown || '')
+  const [mobileTab, setMobileTab] = useState('analysis')
 
   const { dimension_groups, tier, verdict, header, priority_fixes } = analysis
   const candidateName = header?.candidate_name || analysis.candidate_name || 'Candidate'
@@ -30,7 +31,7 @@ function SplitView({ results, onReset }) {
   return (
     <div className="split-view">
       <div className="split-content">
-        <div className="analysis-panel">
+        <div className={`analysis-panel${mobileTab !== 'analysis' ? ' mobile-hidden' : ''}`}>
           <div className="analysis-top-bar">
             <div className="candidate-info">
               <h2>{candidateName}</h2>
@@ -84,7 +85,7 @@ function SplitView({ results, onReset }) {
           </button>
         </div>
 
-        <div className="cv-preview-panel">
+        <div className={`cv-preview-panel${mobileTab !== 'resume' ? ' mobile-hidden' : ''}`}>
           <CVPreviewPanel
             resumeText={analysis.resume_text}
             resumeMarkdown={localMarkdown}
@@ -93,6 +94,23 @@ function SplitView({ results, onReset }) {
             onUpdateMarkdown={setLocalMarkdown}
           />
         </div>
+      </div>
+
+      <div className="mobile-tab-bar">
+        <button
+          className={`mobile-tab-btn${mobileTab === 'analysis' ? ' active' : ''}`}
+          onClick={() => setMobileTab('analysis')}
+        >
+          <span className="mobile-tab-icon">&#128202;</span>
+          Analysis
+        </button>
+        <button
+          className={`mobile-tab-btn${mobileTab === 'resume' ? ' active' : ''}`}
+          onClick={() => setMobileTab('resume')}
+        >
+          <span className="mobile-tab-icon">&#128196;</span>
+          Resume
+        </button>
       </div>
     </div>
   )
