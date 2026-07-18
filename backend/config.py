@@ -1,4 +1,4 @@
-import os
+﻿import os
 from pathlib import Path
 from dotenv import load_dotenv
 from backend.utils.log import logger
@@ -52,7 +52,9 @@ SENTRY_SEND_PII = os.getenv("SENTRY_SEND_PII", "false").lower() == "true"
 TURNSTILE_SECRET_KEY = os.getenv("TURNSTILE_SECRET_KEY", "")
 
 _PROMPT_PATH = Path(__file__).parent / "system_prompt.txt"
+_TECH_PROMPT_PATH = Path(__file__).parent / "system_prompt_tech.txt"
 _cached_prompt: str | None = None
+_cached_tech_prompt: str | None = None
 
 
 def load_system_prompt() -> str:
@@ -67,13 +69,30 @@ def load_system_prompt() -> str:
     return _cached_prompt
 
 
+def load_system_prompt_tech() -> str:
+    global _cached_tech_prompt
+    if _cached_tech_prompt is None:
+        try:
+            _cached_tech_prompt = _TECH_PROMPT_PATH.read_text(encoding="utf-8")
+            logger.debug(f"Tech system prompt loaded ({len(_cached_tech_prompt)} chars)")
+        except FileNotFoundError:
+            logger.error(f"system_prompt_tech.txt not found at {_TECH_PROMPT_PATH}")
+            _cached_tech_prompt = load_system_prompt()
+    return _cached_tech_prompt
+
+
 def reload_system_prompt() -> str:
-    global _cached_prompt
+    global _cached_prompt, _cached_tech_prompt
     try:
         _cached_prompt = _PROMPT_PATH.read_text(encoding="utf-8")
         logger.info(f"System prompt reloaded ({len(_cached_prompt)} chars)")
     except FileNotFoundError:
         logger.error(f"system_prompt.txt not found at {_PROMPT_PATH}")
+    try:
+        _cached_tech_prompt = _TECH_PROMPT_PATH.read_text(encoding="utf-8")
+        logger.info(f"Tech system prompt reloaded ({len(_cached_tech_prompt)} chars)")
+    except FileNotFoundError:
+        logger.error(f"system_prompt_tech.txt not found at {_TECH_PROMPT_PATH}")
     return _cached_prompt
 
 

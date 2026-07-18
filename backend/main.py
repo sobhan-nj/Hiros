@@ -179,6 +179,7 @@ async def analyze(
     resume_markdown: str = Form(""),
     raw_keywords: str = Form("[]"),
     seniority: str = Form("mid"),
+    industry: str = Form("health"),
     target_country: str = Form("germany"),
     referral_source: str = Form(""),
     resume_filename: str = Form("resume.pdf"),
@@ -189,6 +190,8 @@ async def analyze(
         raise HTTPException(status_code=401, detail="Invalid API key")
     if seniority.lower() not in ("junior", "mid", "senior", "executive"):
         seniority = "mid"
+    if industry.lower() not in ("tech", "health"):
+        industry = "health"
     target_country = target_country.lower().strip() or "germany"
 
     try:
@@ -197,7 +200,7 @@ async def analyze(
         keywords_list = []
 
     try:
-        report = await analyze_resume(resume_text, keywords_list, seniority)
+        report = await analyze_resume(resume_text, keywords_list, seniority, industry)
     except Exception as e:
         logger.error(f"Analysis failed: {e}")
         raise HTTPException(status_code=502, detail="LLM analysis failed. Please try again.")

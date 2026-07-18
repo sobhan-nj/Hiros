@@ -1,4 +1,4 @@
-from backend.utils.log import logger
+﻿from backend.utils.log import logger
 from backend.core.schema import (
     AnalysisReport as DataclassReport, DimensionResult as DataclassDim,
     SeniorityCheck, DIMENSION_KEYS
@@ -7,8 +7,11 @@ from backend.core.validator import AnalysisReport as PydanticReport
 from backend import config, llm_client
 
 
-def build_prompt(resume_text, raw_keywords, seniority):
-    system_prompt = config.load_system_prompt()
+def build_prompt(resume_text, raw_keywords, seniority, industry="health"):
+    if industry == "tech":
+        system_prompt = config.load_system_prompt_tech()
+    else:
+        system_prompt = config.load_system_prompt()
     keywords_str = ", ".join(raw_keywords) if raw_keywords else "none extracted"
 
     user_message = f"""CANDIDATE INPUT:
@@ -66,10 +69,10 @@ def _pydantic_to_dataclass(py_report: PydanticReport) -> DataclassReport:
     return report
 
 
-async def analyze_resume(resume_text, raw_keywords, seniority):
-    system_prompt, user_message = build_prompt(resume_text, raw_keywords, seniority)
+async def analyze_resume(resume_text, raw_keywords, seniority, industry="health"):
+    system_prompt, user_message = build_prompt(resume_text, raw_keywords, seniority, industry)
     total_chars = len(system_prompt) + len(user_message)
-    logger.info(f"LLM call ({total_chars} chars) to {config.LLM_PROVIDER}")
+    logger.info(f"LLM call ({total_chars} chars) to {config.LLM_PROVIDER} [industry={industry}]")
 
     try:
         py_report = await llm_client.generate_structured(
@@ -84,5 +87,5 @@ async def analyze_resume(resume_text, raw_keywords, seniority):
 
     report = _pydantic_to_dataclass(py_report)
     report.raw_llm_response = ""
-    logger.info(f"Analysis complete — tier={report.tier}")
+    logger.info(f"Analysis complete — tier={report.tier} industry={industry}")
     return report

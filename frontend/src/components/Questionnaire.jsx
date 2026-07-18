@@ -1,6 +1,15 @@
-import React from 'react'
+﻿import React from 'react'
 
 const STEPS = [
+  {
+    key: 'industry',
+    title: 'Industry',
+    subtitle: 'What industry do you work in?',
+    options: [
+      { value: 'health', label: 'Healthcare', desc: 'Physicians, pharmacists, nurses, and other medical professionals' },
+      { value: 'tech', label: 'Technology', desc: 'Software engineers, data scientists, DevOps, and other tech roles' },
+    ],
+  },
   {
     key: 'seniority',
     title: 'Seniority Level',
@@ -17,7 +26,7 @@ const STEPS = [
     title: 'Target Country',
     subtitle: 'Where are you looking for a job?',
     options: [
-      { value: 'germany', label: 'Germany', desc: 'Analysis includes Approbation & German-specific rules' },
+      { value: 'germany', label: 'Germany', desc: 'Analysis includes country-specific rules and norms' },
       { value: 'united states', label: 'United States', desc: 'General international resume analysis' },
       { value: 'canada', label: 'Canada', desc: 'General international resume analysis' },
       { value: 'other', label: 'Other', desc: 'General international resume analysis' },
@@ -34,7 +43,7 @@ const STEPS = [
       { value: 'whatsapp', label: 'WhatsApp', desc: '' },
       { value: 'friends', label: 'Friends / Family', desc: '' },
       { value: 'university', label: 'University / College', desc: '' },
-      { value: 'conference', label: 'Medical Conference', desc: '' },
+      { value: 'conference', label: 'Conference', desc: '' },
       { value: 'job_board', label: 'Job Board', desc: '' },
       { value: 'google', label: 'Google Search', desc: '' },
       { value: 'other', label: 'Other', desc: '' },
@@ -79,7 +88,7 @@ function Questionnaire({ onComplete, onStepAnswer, onSeeResults, answers, analyz
         <div className="progress-bar" style={{ width: `${progress}%` }} />
       </div>
       <div className="questionnaire-progress-label">{Math.round(progress)}%</div>
-      {analyzing && step > 0 && (
+      {analyzing && step > 1 && (
         <div className="analysis-indicator">
           <span className="analysis-indicator-dot" />
           Analysis in progress...

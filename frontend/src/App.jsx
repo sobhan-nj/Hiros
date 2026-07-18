@@ -1,5 +1,6 @@
-import React, { useState, useEffect, useRef } from 'react'
-import UploadForm from './components/UploadForm.jsx'
+﻿import React, { useState, useEffect, useRef } from 'react'
+import LandingPage from './components/LandingPage.jsx'
+import VBlog from './components/VBlog.jsx'
 import Questionnaire from './components/Questionnaire.jsx'
 import SplitView from './components/SplitView.jsx'
 import AdminLogin from './components/AdminLogin.jsx'
@@ -7,10 +8,15 @@ import AdminDashboard from './components/AdminDashboard.jsx'
 import LoadingScreen from './components/LoadingScreen.jsx'
 import { getCandidates, parseResume, analyzeResume } from './api/client.js'
 
+function getInitialScreen() {
+  const path = window.location.pathname
+  if (path === '/admin') return 'admin-login'
+  if (path === '/vblog') return 'vblog'
+  return 'landing'
+}
+
 function App() {
-  const [screen, setScreen] = useState(
-    window.location.pathname === '/admin' ? 'admin-login' : 'upload'
-  )
+  const [screen, setScreen] = useState(getInitialScreen)
   const [error, setError] = useState(null)
   const [adminKey, setAdminKey] = useState(null)
 
@@ -21,9 +27,10 @@ function App() {
   const [analysisDone, setAnalysisDone] = useState(false)
   const [allQuestionsDone, setAllQuestionsDone] = useState(false)
   const [analyzing, setAnalyzing] = useState(false)
+  const [pendingIndustry, setPendingIndustry] = useState(null)
   const [pendingSeniority, setPendingSeniority] = useState(null)
   const [loadingStep, setLoadingStep] = useState(null)
-  const [answers, setAnswers] = useState({ seniority: 'mid', targetCountry: 'germany', referralSource: '' })
+  const [answers, setAnswers] = useState({ industry: 'health', seniority: 'mid', targetCountry: 'germany', referralSource: '' })
   const analyzingRef = useRef(false)
 
   useEffect(() => {
@@ -34,7 +41,7 @@ function App() {
   }, [analysisDone, analysisResult, screen])
 
   useEffect(() => {
-    if (parseDone && parsedData && pendingSeniority && !analyzingRef.current) {
+    if (parseDone && parsedData && pendingIndustry && pendingSeniority && !analyzingRef.current) {
       analyzingRef.current = true
       setAnalyzing(true)
       analyzeResume({
@@ -42,6 +49,7 @@ function App() {
         resume_markdown: parsedData.resume_markdown,
         raw_keywords: JSON.stringify(parsedData.raw_keywords),
         seniority: pendingSeniority,
+        industry: pendingIndustry,
         target_country: answers.targetCountry,
         referral_source: answers.referralSource,
         resume_filename: parsedData.filename,
@@ -59,7 +67,7 @@ function App() {
         analyzingRef.current = false
       })
     }
-  }, [parseDone, parsedData, pendingSeniority, answers.targetCountry, answers.referralSource])
+  }, [parseDone, parsedData, pendingIndustry, pendingSeniority, answers.targetCountry, answers.referralSource])
 
   const handleSubmit = (file) => {
     setError(null)
@@ -72,13 +80,13 @@ function App() {
     }).catch(err => {
       const msg = err.response?.data?.detail || err.message || 'Failed to parse resume'
       setError(msg)
-      setScreen('upload')
+      setScreen('landing')
     })
   }
 
   const handleParseError = (msg) => {
     setError(msg)
-    setScreen('upload')
+    setScreen('landing')
   }
 
   const handleQuestionnaireComplete = (finalAnswers) => {
@@ -93,13 +101,16 @@ function App() {
 
   const handleStepAnswer = (stepKey, value) => {
     setAnswers(prev => ({ ...prev, [stepKey]: value }))
+    if (stepKey === 'industry') {
+      setPendingIndustry(value)
+    }
     if (stepKey === 'seniority') {
       setPendingSeniority(value)
     }
   }
 
   const handleReset = () => {
-    setScreen('upload')
+    setScreen('landing')
     setParsedData(null)
     setOriginalFile(null)
     setParseDone(false)
@@ -107,10 +118,11 @@ function App() {
     setAnalysisDone(false)
     setAllQuestionsDone(false)
     setAnalyzing(false)
+    setPendingIndustry(null)
     setPendingSeniority(null)
     setLoadingStep(null)
     analyzingRef.current = false
-    setAnswers({ seniority: 'mid', targetCountry: 'germany', referralSource: '' })
+    setAnswers({ industry: 'health', seniority: 'mid', targetCountry: 'germany', referralSource: '' })
     setError(null)
     window.history.pushState({}, '', '/')
   }
@@ -128,21 +140,39 @@ function App() {
     window.history.pushState({}, '', '/admin')
   }
 
+  const handleNavigate = (target) => {
+    if (target === 'landing') {
+      window.history.pushState({}, '', '/')
+      setScreen('landing')
+    } else if (target === 'vblog') {
+      window.history.pushState({}, '', '/vblog')
+      setScreen('vblog')
+    }
+  }
+
+  const showHeader = screen !== 'landing' && screen !== 'vblog'
+
   return (
     <div className="app">
-      <header className="app-header">
-        <h1 onClick={handleReset} style={{ cursor: 'pointer' }}>CV Analyzer</h1>
-        <p className="subtitle">Find your CV flaws before the recruiter does</p>
-      </header>
+      {showHeader && (
+        <header className="app-header">
+          <h1 onClick={handleReset} style={{ cursor: 'pointer' }}>CV Analyzer</h1>
+          <p className="subtitle">Find your CV flaws before the recruiter does</p>
+        </header>
+      )}
 
       <main className="app-main">
         {error && <div className="error-banner">{error}</div>}
 
-        {screen === 'upload' && (
-          <UploadForm
+        {screen === 'landing' && (
+          <LandingPage
             onSubmit={handleSubmit}
             onError={handleParseError}
           />
+        )}
+
+        {screen === 'vblog' && (
+          <VBlog onNavigate={handleNavigate} />
         )}
 
         {screen === 'questionnaire' && (

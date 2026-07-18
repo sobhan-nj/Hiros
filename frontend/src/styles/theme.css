@@ -1,0 +1,16 @@
+﻿@import url('https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;1,9..144,500&family=Source+Sans+3:wght@400;500;600;700&display=swap');
+
+:root {
+  --navy-950: #0d1b2a;
+  --navy-900: #142433;
+  --navy-800: #1b3145;
+  --teal-600: #2a7f7e;
+  --teal-500: #3a9d9b;
+  --cream-50: #faf7f0;
+  --cream-100: #f3ede0;
+  --amber-400: #d9a441;
+  --amber-500: #c8912f;
+  --ink-700: #33404a;
+  --ink-500: #5a6b74;
+  --line: rgba(13,27,42,0.1);
+}
