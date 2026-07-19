@@ -1,12 +1,12 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react'
 
 const LOADING_STEPS = [
-  { label: 'Parsing your resume', delay: 2500 },
-  { label: 'Extracting keywords', delay: 3500 },
-  { label: 'Analyzing your experience', delay: 5000 },
-  { label: 'Extracting your skills', delay: 4000 },
-  { label: 'Generating recommendations', delay: 5000 },
-  { label: 'Building your report' },
+  'Parsing your resume',
+  'Extracting keywords',
+  'Analyzing your experience',
+  'Extracting your skills',
+  'Generating recommendations',
+  'Building your report',
 ]
 
 const FACTS = [
@@ -15,14 +15,17 @@ const FACTS = [
   "A one-line note next to a career gap reads far better than silence.",
   "Tailoring your CV to the target country's norms improves response rates.",
   "Quantified achievements stand out more than generic responsibility lists.",
-  "Use strong action verbs \u2014 'Led', 'Built', 'Reduced' \u2014 not passive phrases.",
+  "Use strong action verbs — 'Led', 'Built', 'Reduced' — not passive phrases.",
   "Every bullet should answer: what did you do, and what was the result?",
   "Consistent date formats and section ordering make your CV scannable.",
 ]
 
 const RING_CIRCUMFERENCE = 301.6
 const FAST_FORWARD_DURATION = 400
-const MIN_VISIBLE_DURATION = 2000
+
+function randomDelay() {
+  return Math.floor(Math.random() * 2000) + 5000
+}
 
 const CHECK_SVG = (
   <svg viewBox="0 0 24 24" fill="none">
@@ -36,33 +39,24 @@ function LoadingScreen({ analysisDone, onReady }) {
   const [factIndex, setFactIndex] = useState(0)
   const [factFading, setFactFading] = useState(false)
   const [fastForwarded, setFastForwarded] = useState(false)
-  const [animationDone, setAnimationDone] = useState(false)
 
   const timerRef = useRef(null)
   const factTimerRef = useRef(null)
   const onReadyRef = useRef(onReady)
-  const mountTimeRef = useRef(Date.now())
-  const hasMountedRef = useRef(false)
   onReadyRef.current = onReady
 
-  // Mark as mounted after first render
-  useEffect(() => {
-    hasMountedRef.current = true
-  }, [])
-
-  // Normal animation timer - advances one step at a time
+  // Normal animation - random 5-7s per step, last step waits for analysisDone
   useEffect(() => {
     if (analysisDone || fastForwarded) return
 
-    if (currentStep >= LOADING_STEPS.length) {
-      setAnimationDone(true)
-      return
-    }
+    // Don't advance past second-to-last step until analysisDone
+    if (currentStep >= LOADING_STEPS.length - 1) return
 
+    const delay = randomDelay()
     timerRef.current = setTimeout(() => {
       setCurrentStep(prev => prev + 1)
       setPercentage(Math.round(((currentStep + 1) / LOADING_STEPS.length) * 100))
-    }, LOADING_STEPS[currentStep]?.delay ?? 1000)
+    }, delay)
 
     return () => clearTimeout(timerRef.current)
   }, [currentStep, analysisDone, fastForwarded])
@@ -80,25 +74,26 @@ function LoadingScreen({ analysisDone, onReady }) {
     return () => clearInterval(factTimerRef.current)
   }, [])
 
-  // Fast-forward when backend result arrives early
-  const doFastForward = useCallback(() => {
-    if (fastForwarded) return
+  // When analysisDone, fast-forward to completion
+  useEffect(() => {
+    if (!analysisDone || fastForwarded) return
+
     setFastForwarded(true)
     clearInterval(factTimerRef.current)
     clearTimeout(timerRef.current)
 
-    // Animate remaining steps quickly
-    const remainingSteps = LOADING_STEPS.length - currentStep
-    if (remainingSteps <= 0) {
+    // Quickly advance remaining steps
+    const remaining = LOADING_STEPS.length - currentStep
+    if (remaining <= 0) {
       setPercentage(100)
       setTimeout(() => onReadyRef.current?.(), FAST_FORWARD_DURATION)
       return
     }
 
-    const stepDelay = Math.max(FAST_FORWARD_DURATION / remainingSteps, 60)
+    const stepDelay = Math.max(FAST_FORWARD_DURATION / remaining, 80)
     let step = currentStep
 
-    const advanceStep = () => {
+    const advance = () => {
       step++
       setCurrentStep(step)
       setPercentage(Math.round((step / LOADING_STEPS.length) * 100))
@@ -106,38 +101,12 @@ function LoadingScreen({ analysisDone, onReady }) {
       if (step >= LOADING_STEPS.length) {
         setTimeout(() => onReadyRef.current?.(), FAST_FORWARD_DURATION)
       } else {
-        setTimeout(advanceStep, stepDelay)
+        setTimeout(advance, stepDelay)
       }
     }
 
-    setTimeout(advanceStep, stepDelay)
-  }, [currentStep, fastForwarded])
-
-  // Trigger fast-forward when analysis is done
-  // BUT only after minimum visible duration to prevent instant completion
-  useEffect(() => {
-    if (!analysisDone || fastForwarded || !hasMountedRef.current) return
-
-    const elapsed = Date.now() - mountTimeRef.current
-    if (elapsed < MIN_VISIBLE_DURATION) {
-      // Analysis finished too fast - wait until minimum time has passed
-      const remaining = MIN_VISIBLE_DURATION - elapsed
-      const timer = setTimeout(() => {
-        doFastForward()
-      }, remaining)
-      return () => clearTimeout(timer)
-    } else {
-      // Enough time has passed - fast forward immediately
-      doFastForward()
-    }
-  }, [analysisDone, fastForwarded, doFastForward])
-
-  // If animation finished but result not yet, hold on last step
-  useEffect(() => {
-    if (animationDone && !analysisDone && !fastForwarded) {
-      // Keep showing last step with spinner, don't advance further
-    }
-  }, [animationDone, analysisDone, fastForwarded])
+    setTimeout(advance, stepDelay)
+  }, [analysisDone, fastForwarded, currentStep])
 
   const displayStep = fastForwarded ? LOADING_STEPS.length : Math.min(currentStep, LOADING_STEPS.length)
   const displayPercentage = fastForwarded ? 100 : percentage
@@ -169,27 +138,27 @@ function LoadingScreen({ analysisDone, onReady }) {
         <h3 className="loading-title">Analyzing Your Resume</h3>
 
         <div className="loading-steps">
-          {LOADING_STEPS.map((step, i) => {
+          {LOADING_STEPS.map((label, i) => {
             let status = 'pending'
             if (i < displayStep) status = 'done'
             else if (i === displayStep && displayStep < LOADING_STEPS.length) status = 'active'
 
             return (
-              <div key={i} className={`loading-step ${status}`}>
+              <div key={i} className={loading-step }>
                 <div className="step-icon">
                   {status === 'done' && CHECK_SVG}
                   {status === 'active' && <div className="spinner" />}
                 </div>
-                <span className="loading-step-label">{step.label}</span>
+                <span className="loading-step-label">{label}</span>
               </div>
             )
           })}
         </div>
 
-        {!analysisDone && <p className="loading-note">This may take 30\u201360 seconds</p>}
+        {!analysisDone && <p className="loading-note">This may take 30–60 seconds</p>}
 
         <div className="fact-ticker">
-          <span className={`fact-text ${factFading ? 'fading-out' : 'fading-in'}`}>
+          <span className={act-text }>
             {FACTS[factIndex]}
           </span>
         </div>
