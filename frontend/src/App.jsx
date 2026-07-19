@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useRef } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import LandingPage from './components/LandingPage.jsx'
 import VBlog from './components/VBlog.jsx'
 import Questionnaire from './components/Questionnaire.jsx'
@@ -25,20 +25,11 @@ function App() {
   const [parseDone, setParseDone] = useState(false)
   const [analysisResult, setAnalysisResult] = useState(null)
   const [analysisDone, setAnalysisDone] = useState(false)
-  const [allQuestionsDone, setAllQuestionsDone] = useState(false)
   const [analyzing, setAnalyzing] = useState(false)
   const [pendingIndustry, setPendingIndustry] = useState(null)
   const [pendingSeniority, setPendingSeniority] = useState(null)
-  const [loadingStep, setLoadingStep] = useState(null)
   const [answers, setAnswers] = useState({ industry: 'health', seniority: 'mid', targetCountry: 'germany', referralSource: '' })
   const analyzingRef = useRef(false)
-
-  useEffect(() => {
-    if (analysisDone && analysisResult && screen === 'loading') {
-      setScreen('results')
-      setError(null)
-    }
-  }, [analysisDone, analysisResult, screen])
 
   useEffect(() => {
     if (parseDone && parsedData && pendingIndustry && pendingSeniority && !analyzingRef.current) {
@@ -57,13 +48,11 @@ function App() {
         setAnalysisResult(data)
         setAnalysisDone(true)
         setAnalyzing(false)
-        setLoadingStep(null)
         analyzingRef.current = false
       }).catch(err => {
         const msg = err.response?.data?.detail || err.message || 'Analysis failed'
         setError(msg)
         setAnalyzing(false)
-        setLoadingStep(null)
         analyzingRef.current = false
       })
     }
@@ -91,7 +80,6 @@ function App() {
 
   const handleQuestionnaireComplete = (finalAnswers) => {
     setAnswers(finalAnswers)
-    setAllQuestionsDone(true)
   }
 
   const handleSeeResults = () => {
@@ -109,6 +97,11 @@ function App() {
     }
   }
 
+  const handleLoadingReady = () => {
+    setScreen('results')
+    setError(null)
+  }
+
   const handleReset = () => {
     setScreen('landing')
     setParsedData(null)
@@ -116,11 +109,9 @@ function App() {
     setParseDone(false)
     setAnalysisResult(null)
     setAnalysisDone(false)
-    setAllQuestionsDone(false)
     setAnalyzing(false)
     setPendingIndustry(null)
     setPendingSeniority(null)
-    setLoadingStep(null)
     analyzingRef.current = false
     setAnswers({ industry: 'health', seniority: 'mid', targetCountry: 'germany', referralSource: '' })
     setError(null)
@@ -150,15 +141,20 @@ function App() {
     }
   }
 
-  const showHeader = screen !== 'landing' && screen !== 'vblog'
+  const showHeader = screen === 'questionnaire' || screen === 'loading' || screen === 'results'
 
   return (
     <div className="app">
       {showHeader && (
-        <header className="app-header">
-          <h1 onClick={handleReset} style={{ cursor: 'pointer' }}>CV Analyzer</h1>
-          <p className="subtitle">Find your CV flaws before the recruiter does</p>
-        </header>
+        <nav className="landing-nav">
+          <a href="/" className="landing-logo" onClick={(e) => { e.preventDefault(); handleReset() }}>
+            <img src="/logo.png" alt="Hiros mascot" className="landing-logo-icon" />
+            <span>Hiros</span>
+          </a>
+          <div className="landing-nav-links">
+            <span className="brand-tagline">Find your CV flaws before the recruiter does</span>
+          </div>
+        </nav>
       )}
 
       <main className="app-main">
@@ -186,7 +182,7 @@ function App() {
         )}
 
         {screen === 'loading' && (
-          <LoadingScreen analysisDone={analysisDone} />
+          <LoadingScreen analysisDone={analysisDone} onReady={handleLoadingReady} />
         )}
 
         {screen === 'results' && analysisResult && (

@@ -555,3 +555,9 @@
     text-align: center;
   }
 }
+
+/* Brand tagline in nav (questionnaire/loading screens) */
+.brand-tagline {
+  font-size: 13.5px;
+  color: var(--ink-500);
+}
