@@ -144,7 +144,7 @@ function LoadingScreen({ analysisDone, onReady }) {
             else if (i === displayStep && displayStep < LOADING_STEPS.length) status = 'active'
 
             return (
-              <div key={i} className={loading-step }>
+              <div key={i} className={`loading-step ${status}`}>
                 <div className="step-icon">
                   {status === 'done' && CHECK_SVG}
                   {status === 'active' && <div className="spinner" />}
@@ -158,7 +158,7 @@ function LoadingScreen({ analysisDone, onReady }) {
         {!analysisDone && <p className="loading-note">This may take 30–60 seconds</p>}
 
         <div className="fact-ticker">
-          <span className={act-text }>
+          <span className={`fact-text ${factFading ? 'fading-out' : 'fading-in'}`}>
             {FACTS[factIndex]}
           </span>
         </div>
