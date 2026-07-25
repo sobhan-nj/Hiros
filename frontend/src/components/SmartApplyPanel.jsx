@@ -75,15 +75,13 @@ function SmartApplyPanel({ rewrites, markdown, onApply, onDismiss }) {
   }
 
   const handleApply = () => {
-    const selected = rewrites.filter((r, i) => {
-      if (!selectedIndices.has(i)) return false
-      if (r.dimension_code && !TEXT_EDITABLE_DIMENSIONS.has(r.dimension_code)) return false
-      if (!matchCache[i]) return false
-      return true
-    }).map((r, _, arr) => {
-      const i = rewrites.indexOf(r)
-      return { ...r, matchInfo: matchCache[i] }
-    })
+    const selected = rewrites.reduce((acc, r, i) => {
+      if (!selectedIndices.has(i)) return acc
+      if (r.dimension_code && !TEXT_EDITABLE_DIMENSIONS.has(r.dimension_code)) return acc
+      if (!matchCache[i]) return acc
+      acc.push({ ...r, matchInfo: matchCache[i] })
+      return acc
+    }, [])
     onApply(selected)
   }
 

@@ -2,7 +2,7 @@ import React, { useState, useMemo, useCallback, useRef, useEffect } from 'react'
 import { marked } from 'marked'
 import CategoryTabs from './CategoryTabs.jsx'
 import DimensionRow from './DimensionRow.jsx'
-import { TEXT_EDITABLE_DIMENSIONS, normalizeText, findBestMatch } from '../utils/matching.js'
+import { TEXT_EDITABLE_DIMENSIONS, findBestMatch } from '../utils/matching.js'
 
 const GROUP_ORDER = ['content', 'layout', 'red_flags', 'readability']
 
@@ -30,6 +30,7 @@ function FullResults({ results, onBackToSummary, onReset }) {
   })
   const [toast, setToast] = useState(null)
   const [localMarkdown, setLocalMarkdown] = useState(resume_markdown || '')
+  const [changesApplied, setChangesApplied] = useState(false)
   const toastTimerRef = useRef(null)
 
   const candidateName = header?.candidate_name || 'Candidate'
@@ -95,13 +96,30 @@ function FullResults({ results, onBackToSummary, onReset }) {
     }
 
     // Sort by position descending so replacements don't shift indices
-    const sorted = rewritesToApply
-      .sort((a, b) => b.match.index - a.match.index)
+    const sorted = [...rewritesToApply].sort((a, b) => b.match.index - a.match.index)
+
+    // Check for overlapping matches
+    const overlaps = new Set()
+    for (let i = 0; i < sorted.length; i++) {
+      for (let j = i + 1; j < sorted.length; j++) {
+        const a = sorted[i].match
+        const b = sorted[j].match
+        if (a.index < b.index + b.length && b.index < a.index + a.length) {
+          overlaps.add(j) // skip the lower-priority (later in sorted) one
+        }
+      }
+    }
 
     let currentMd = markdownSource
     let applied = 0
+    let skippedOverlaps = 0
 
-    for (const { match, rewritten } of sorted) {
+    for (let i = 0; i < sorted.length; i++) {
+      if (overlaps.has(i)) {
+        skippedOverlaps++
+        continue
+      }
+      const { match, rewritten } = sorted[i]
       const target = currentMd.substring(match.index, match.index + match.length)
       if (target === match.text) {
         currentMd = currentMd.substring(0, match.index) + rewritten + currentMd.substring(match.index + match.length)
@@ -111,7 +129,10 @@ function FullResults({ results, onBackToSummary, onReset }) {
 
     if (applied > 0) {
       setLocalMarkdown(currentMd)
-      showToast(`${applied} change${applied !== 1 ? 's' : ''} applied`, 'success')
+      setChangesApplied(true)
+      const parts = [`${applied} change${applied !== 1 ? 's' : ''} applied`]
+      if (skippedOverlaps > 0) parts.push(`${skippedOverlaps} skipped (overlapping text)`)
+      showToast(parts.join('. '), 'success')
     } else {
       showToast('No changes could be applied.', 'info')
     }
@@ -119,19 +140,19 @@ function FullResults({ results, onBackToSummary, onReset }) {
 
   const handleApplyAll = useCallback(() => {
     const applicable = rewrites
-      ?.map((r, i) => ({ ...r, match: findBestMatch(markdownSource, r.original), _idx: i }))
+      ?.map((r, i) => ({ ...r, match: matchCache[i], _idx: i }))
       .filter(r => isApplicable(r, r._idx) && r.match) || []
     applyRewrites(applicable)
     setShowDrawer(false)
-  }, [rewrites, markdownSource, isApplicable, applyRewrites])
+  }, [rewrites, matchCache, isApplicable, applyRewrites])
 
   const handleApply = useCallback(() => {
     const selected = rewrites
-      ?.map((r, i) => ({ ...r, match: findBestMatch(markdownSource, r.original), _idx: i }))
+      ?.map((r, i) => ({ ...r, match: matchCache[i], _idx: i }))
       .filter(r => selectedIndices.has(r._idx) && isApplicable(r, r._idx) && r.match) || []
     applyRewrites(selected)
     setShowDrawer(false)
-  }, [rewrites, markdownSource, selectedIndices, isApplicable, applyRewrites])
+  }, [rewrites, matchCache, selectedIndices, isApplicable, applyRewrites])
 
   const handleDownload = (format) => {
     if (format === 'md') {
@@ -188,7 +209,7 @@ function FullResults({ results, onBackToSummary, onReset }) {
           <div className="resume-toolbar">
             <span className="resume-filename">{resumeFilename || 'Resume'}</span>
             <div className="toolbar-actions">
-              {rewrites && rewrites.length > 0 && (
+              {rewrites && rewrites.length > 0 && !changesApplied && (
                 <div className="apply-split-btn">
                   <button
                     className="toolbar-btn toolbar-btn-primary"
@@ -205,6 +226,11 @@ function FullResults({ results, onBackToSummary, onReset }) {
                   </button>
                 </div>
               )}
+              {changesApplied && (
+                <span className="toolbar-btn toolbar-btn-primary" style={{ opacity: 0.6, cursor: 'default' }}>
+                  Changes Applied
+                </span>
+              )}
               <button className="toolbar-btn toolbar-btn-ghost">
                 Edit
               </button>
@@ -216,7 +242,7 @@ function FullResults({ results, onBackToSummary, onReset }) {
         </div>
 
         <div className="pane-resume-scroll">
-          {showDrawer && (
+          {showDrawer && !changesApplied && (
             <div className="changes-drawer">
               <div className="changes-drawer-head">
                 <span className="changes-drawer-title">

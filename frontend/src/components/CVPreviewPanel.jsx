@@ -77,8 +77,9 @@ function CVPreviewPanel({ resumeText, resumeMarkdown, resumeFilename, candidateI
       .sort((a, b) => b.index - a.index)
 
     for (const rewrite of sorted) {
-      if (currentMd.includes(rewrite.matchText)) {
-        currentMd = currentMd.replace(rewrite.matchText, rewrite.rewritten)
+      const target = currentMd.substring(rewrite.index, rewrite.index + rewrite.matchText.length)
+      if (target === rewrite.matchText) {
+        currentMd = currentMd.substring(0, rewrite.index) + rewrite.rewritten + currentMd.substring(rewrite.index + rewrite.matchText.length)
         applied++
       } else {
         skipped.push(rewrite.matchText.length > 50 ? rewrite.matchText.substring(0, 50) + '...' : rewrite.matchText)

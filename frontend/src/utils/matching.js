@@ -86,14 +86,9 @@ export function findBestMatch(markdown, original) {
       }
 
       if (allFound) {
-        const lastWord = seq[seq.length - 1]
-        const lastRegex = new RegExp('\\b' + lastWord.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b', 'i')
-        const lastMatch = lastRegex.exec(markdown.substring(matchStart))
-        if (lastMatch) {
-          const matchEnd = matchStart + lastMatch.index + lastMatch[0].length
-          const text = markdown.substring(matchStart, matchEnd)
-          return { index: matchStart, length: text.length, text, type: 'fuzzy' }
-        }
+        // cursor is already at the end of the last matched word
+        const text = markdown.substring(matchStart, cursor)
+        return { index: matchStart, length: text.length, text, type: 'fuzzy' }
       }
     }
   }
