@@ -1,4 +1,4 @@
-﻿from backend.utils.log import logger
+from backend.utils.log import logger
 from backend.core.schema import (
     AnalysisReport as DataclassReport, DimensionResult as DataclassDim,
     SeniorityCheck, DIMENSION_KEYS
@@ -58,7 +58,15 @@ def _pydantic_to_dataclass(py_report: PydanticReport) -> DataclassReport:
                 highlight_targets=hl_targets,
             )
 
-    report.rewrites = [{"original": r.original, "rewritten": r.rewritten} for r in py_report.rewrites]
+    report.rewrites = [
+        {
+            "original": r.original,
+            "rewritten": r.rewritten,
+            "dimension_code": r.dimension_code,
+            "action_type": r.action_type,
+        }
+        for r in py_report.rewrites
+    ]
     report.priority_fixes = [
         {"dimension_code": f.dimension_code, "dimension_name": f.dimension_name, "fix": f.fix}
         for f in py_report.priority_fixes

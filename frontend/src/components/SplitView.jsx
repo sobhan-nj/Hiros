@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useRef, useCallback, useEffect } from 'react'
 import GroupTabs from './GroupTabs.jsx'
 import AnalysisPanel from './AnalysisPanel.jsx'
 import CVPreviewPanel from './CVPreviewPanel.jsx'
@@ -11,9 +11,13 @@ function SplitView({ results, onReset }) {
   const [expandedSub, setExpandedSub] = useState(null)
   const [localMarkdown, setLocalMarkdown] = useState(analysis.resume_markdown || '')
   const [mobileTab, setMobileTab] = useState('analysis')
+  const [splitRatio, setSplitRatio] = useState(55)
+  const isDragging = useRef(false)
+  const splitRef = useRef(null)
 
-  const { dimension_groups, tier, verdict, header, priority_fixes } = analysis
+  const { dimension_groups, tier, verdict, header, priority_fixes, rewrites } = analysis
   const candidateName = header?.candidate_name || analysis.candidate_name || 'Candidate'
+  const tierClass = tier ? `tier-badge tier-${tier.toLowerCase().replace(/\s+/g, '-')}` : 'tier-badge'
 
   const handleSubsectionToggle = (groupKey, dimKey) => {
     if (expandedSub?.dimKey === dimKey) {
@@ -28,10 +32,43 @@ function SplitView({ results, onReset }) {
     setExpandedSub(null)
   }
 
+  const handleMouseDown = useCallback((e) => {
+    e.preventDefault()
+    isDragging.current = true
+    document.body.style.cursor = 'col-resize'
+    document.body.style.userSelect = 'none'
+  }, [])
+
+  const handleMouseMove = useCallback((e) => {
+    if (!isDragging.current || !splitRef.current) return
+    const rect = splitRef.current.getBoundingClientRect()
+    const x = e.clientX - rect.left
+    const pct = (x / rect.width) * 100
+    setSplitRatio(Math.max(30, Math.min(75, pct)))
+  }, [])
+
+  const handleMouseUp = useCallback(() => {
+    isDragging.current = false
+    document.body.style.cursor = ''
+    document.body.style.userSelect = ''
+  }, [])
+
+  useEffect(() => {
+    document.addEventListener('mousemove', handleMouseMove)
+    document.addEventListener('mouseup', handleMouseUp)
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove)
+      document.removeEventListener('mouseup', handleMouseUp)
+    }
+  }, [handleMouseMove, handleMouseUp])
+
   return (
     <div className="split-view">
-      <div className="split-content">
-        <div className={`analysis-panel${mobileTab !== 'analysis' ? ' mobile-hidden' : ''}`}>
+      <div className="split-content" ref={splitRef}>
+        <div
+          className="analysis-panel"
+          style={{ width: splitRatio + '%' }}
+        >
           <div className="analysis-top-bar">
             <div className="candidate-info">
               <h2>{candidateName}</h2>
@@ -43,7 +80,7 @@ function SplitView({ results, onReset }) {
               </div>
             </div>
             <div className="tier-verdict">
-              <span className={`tier-badge tier-${(tier || '').toLowerCase().replace(/\s+/g, '-').replace('%', '')}`}>{tier}</span>
+              <span className={tierClass}>{tier}</span>
               {verdict && <p className="verdict-text">{verdict}</p>}
             </div>
 
@@ -85,27 +122,36 @@ function SplitView({ results, onReset }) {
           </button>
         </div>
 
-        <div className={`cv-preview-panel${mobileTab !== 'resume' ? ' mobile-hidden' : ''}`}>
+        <div
+          className="split-divider"
+          onMouseDown={handleMouseDown}
+        />
+
+        <div
+          className="cv-preview-panel"
+          style={{ width: (100 - splitRatio) + '%' }}
+        >
           <CVPreviewPanel
             resumeText={analysis.resume_text}
             resumeMarkdown={localMarkdown}
             resumeFilename={analysis.resume_filename}
             candidateId={id}
             onUpdateMarkdown={setLocalMarkdown}
+            rewrites={rewrites}
           />
         </div>
       </div>
 
       <div className="mobile-tab-bar">
         <button
-          className={`mobile-tab-btn${mobileTab === 'analysis' ? ' active' : ''}`}
+          className="mobile-tab-btn"
           onClick={() => setMobileTab('analysis')}
         >
           <span className="mobile-tab-icon">&#128202;</span>
           Analysis
         </button>
         <button
-          className={`mobile-tab-btn${mobileTab === 'resume' ? ' active' : ''}`}
+          className="mobile-tab-btn"
           onClick={() => setMobileTab('resume')}
         >
           <span className="mobile-tab-icon">&#128196;</span>

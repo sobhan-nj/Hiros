@@ -1,18 +1,22 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import { marked } from 'marked'
 import TurndownService from 'turndown'
+import SmartApplyPanel from './SmartApplyPanel.jsx'
 
 const turndown = new TurndownService({
   headingStyle: 'atx',
   bulletListMarker: '-',
 })
 
-function CVPreviewPanel({ resumeText, resumeMarkdown, resumeFilename, candidateId, onUpdateMarkdown }) {
+function CVPreviewPanel({ resumeText, resumeMarkdown, resumeFilename, candidateId, onUpdateMarkdown, rewrites }) {
   const [isEditing, setIsEditing] = useState(false)
   const [editedHtml, setEditedHtml] = useState('')
   const [showMenu, setShowMenu] = useState(false)
+  const [toast, setToast] = useState(null)
+  const [showSmartApply, setShowSmartApply] = useState(false)
   const menuRef = useRef(null)
   const editorRef = useRef(null)
+  const toastTimerRef = useRef(null)
 
   const markdownSource = resumeMarkdown || resumeText || ''
   const renderedHtml = useMemo(() => marked.parse(markdownSource), [markdownSource])
@@ -34,6 +38,69 @@ function CVPreviewPanel({ resumeText, resumeMarkdown, resumeFilename, candidateI
     document.addEventListener('mousedown', handleClickOutside)
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [showMenu])
+
+  useEffect(() => {
+    return () => { if (toastTimerRef.current) clearTimeout(toastTimerRef.current) }
+  }, [])
+
+  const showToast = useCallback((message, type) => {
+    setToast({ message, type })
+    toastTimerRef.current = setTimeout(() => setToast(null), 5000)
+  }, [])
+
+  const handleOpenSmartApply = useCallback(() => {
+    if (!rewrites || rewrites.length === 0) {
+      showToast('No suggested rewrites available for this resume.', 'info')
+      return
+    }
+    setShowSmartApply(true)
+  }, [rewrites, showToast])
+
+  const handleSmartApply = useCallback((selectedRewrites) => {
+    if (!selectedRewrites || selectedRewrites.length === 0) {
+      showToast('No changes selected.', 'info')
+      setShowSmartApply(false)
+      return
+    }
+
+    let currentMd = markdownSource
+    let applied = 0
+    let skipped = []
+
+    const sorted = selectedRewrites
+      .map(r => {
+        const matchText = r.matchInfo?.text || r.original
+        const matchIdx = currentMd.indexOf(matchText)
+        return { ...r, matchText, index: matchIdx }
+      })
+      .filter(r => r.index !== -1)
+      .sort((a, b) => b.index - a.index)
+
+    for (const rewrite of sorted) {
+      if (currentMd.includes(rewrite.matchText)) {
+        currentMd = currentMd.replace(rewrite.matchText, rewrite.rewritten)
+        applied++
+      } else {
+        skipped.push(rewrite.matchText.length > 50 ? rewrite.matchText.substring(0, 50) + '...' : rewrite.matchText)
+      }
+    }
+
+    if (applied > 0 && onUpdateMarkdown) {
+      onUpdateMarkdown(currentMd)
+    }
+
+    const parts = []
+    if (applied > 0) parts.push(applied + ' change' + (applied !== 1 ? 's' : '') + ' applied')
+    if (skipped.length > 0) {
+      parts.push(skipped.length + ' could not be auto-applied (text not found)')
+    }
+    showToast(parts.join('. '), applied > 0 ? 'success' : 'info')
+    setShowSmartApply(false)
+  }, [markdownSource, onUpdateMarkdown, showToast])
+
+  const handleDismissSmartApply = useCallback(() => {
+    setShowSmartApply(false)
+  }, [])
 
   const handleEdit = useCallback(() => {
     setIsEditing(true)
@@ -64,7 +131,7 @@ function CVPreviewPanel({ resumeText, resumeMarkdown, resumeFilename, candidateI
     const a = document.createElement('a')
     a.href = url
     const safeName = (resumeFilename || 'resume').replace(/\.[^.]+$/, '')
-    a.download = `${safeName}.md`
+    a.download = safeName + '.md'
     a.click()
     URL.revokeObjectURL(url)
     setShowMenu(false)
@@ -73,7 +140,7 @@ function CVPreviewPanel({ resumeText, resumeMarkdown, resumeFilename, candidateI
   const downloadHtml = useCallback(async () => {
     if (candidateId) {
       const baseUrl = import.meta.env.PROD ? '' : '/api'
-      window.open(`${baseUrl}/cv/${candidateId}/download/html`, '_blank')
+      window.open(baseUrl + '/cv/' + candidateId + '/download/html', '_blank')
     }
     setShowMenu(false)
   }, [candidateId])
@@ -81,7 +148,7 @@ function CVPreviewPanel({ resumeText, resumeMarkdown, resumeFilename, candidateI
   const downloadLatex = useCallback(async () => {
     if (candidateId) {
       const baseUrl = import.meta.env.PROD ? '' : '/api'
-      window.open(`${baseUrl}/cv/${candidateId}/download/tex`, '_blank')
+      window.open(baseUrl + '/cv/' + candidateId + '/download/tex', '_blank')
     }
     setShowMenu(false)
   }, [candidateId])
@@ -110,6 +177,11 @@ function CVPreviewPanel({ resumeText, resumeMarkdown, resumeFilename, candidateI
             </>
           ) : (
             <>
+              {rewrites && rewrites.length > 0 && (
+                <button className="cv-action-btn cv-apply-btn" onClick={handleOpenSmartApply}>
+                  Apply Changes
+                </button>
+              )}
               <button className="cv-action-btn cv-edit-btn" onClick={handleEdit}>
                 Edit
               </button>
@@ -133,6 +205,15 @@ function CVPreviewPanel({ resumeText, resumeMarkdown, resumeFilename, candidateI
         </div>
       </div>
 
+      {showSmartApply && (
+        <SmartApplyPanel
+          rewrites={rewrites}
+          markdown={markdownSource}
+          onApply={handleSmartApply}
+          onDismiss={handleDismissSmartApply}
+        />
+      )}
+
       <div className="cv-text-wrapper">
         {isEditing ? (
           <div
@@ -148,6 +229,13 @@ function CVPreviewPanel({ resumeText, resumeMarkdown, resumeFilename, candidateI
           />
         )}
       </div>
+
+      {toast && (
+        <div className={`cv-toast cv-toast-${toast.type}`}>
+          <span className="cv-toast-icon">{toast.type === 'success' ? '✓' : 'ℹ'}</span>
+          {toast.message}
+        </div>
+      )}
     </div>
   )
 }

@@ -281,13 +281,17 @@ CV: "Built ETL pipeline with Python and Apache Airflow during thesis project, pr
 CV: Claims "Data Scientist" but lists only frontend technologies (React, CSS, HTML) → rating "Needs Improvement". Fix: "Add ML/statistics skills or adjust role target."
 
 ## REWRITES
-Provide 3-8 of the weakest bullet points, rewritten with metrics and impact. Each must quote original, show rewritten version with quantified result, specific scope, concrete outcome.
+Provide 3-8 of the weakest bullet points, rewritten with metrics and impact. Each rewrite must include:
+- `original`: exact quote from the resume (verbatim, preserve formatting)
+- `rewritten`: improved version with quantified result, specific scope, concrete outcome
+- `dimension_code`: which analysis dimension this rewrite addresses (e.g., "bullet_quality_ownership", "impact_so_what", "professional_summary", "keyword_density", "grammar_spelling_consistency", "fluff_buzzwords")
+- `action_type`: "replace" for text swaps, "insert" for new content additions, "delete" for fluff removal
 
 **CRITICAL FOR AUTO-APPLY**: When quoting the original text, copy it EXACTLY as it appears in the resume — preserve all markdown formatting, bold markers (**), whitespace, and line breaks. Do not paraphrase or reformat the original quote. The quoted text must be a verbatim substring of the resume markdown so it can be found via text search.
 
-For each rewrite, also provide:
-- `dimension`: which analysis dimension this rewrite addresses (e.g., "bullet_quality_ownership", "impact_so_what", "professional_summary")
-- `explanation`: a brief 1-sentence explanation of what was changed and why (e.g., "Added quantified pipeline metrics to strengthen impact statement")
+Each rewrite must also include:
+- `dimension_code`: which analysis dimension this rewrite addresses (e.g., "bullet_quality_ownership", "impact_so_what", "professional_summary")
+- `action_type`: "replace" for text swaps, "insert" for new content additions, "delete" for fluff removal
 
 ## OVERALL VERDICT
 - **Top 10%**: 14–17 dims Great/Good, no Bad, legal & eligibility status crystal clear, strong tech narrative, quantified achievements.

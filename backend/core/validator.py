@@ -112,6 +112,8 @@ class DimensionResult(BaseModel):
 class Rewrite(BaseModel):
     original: str
     rewritten: str
+    dimension_code: str = ""
+    action_type: str = "replace"
 
 
 class PriorityFix(BaseModel):

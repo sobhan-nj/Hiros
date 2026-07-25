@@ -207,7 +207,11 @@ CV: "Tätigkeitsbereich: Patientenversorgung, Dokumentation, Teamarbeit, Visite"
 CV: "PJ-Tertial Innere Medizin: Begleitete fachärztliche Konsultationen, erstellte Patientenbriefe, präsentierte Fälle in Visiten" → rating "Great". Rotation meets specificity bar.
 
 ## REWRITES
-Provide 3-8 of the weakest bullet points, rewritten with metrics and impact. Each must quote original, show rewritten version with quantified result, specific scope, concrete outcome.
+Provide 3-8 of the weakest bullet points, rewritten with metrics and impact. Each rewrite must include:
+- `original`: exact quote from the resume (verbatim, preserve formatting)
+- `rewritten`: improved version with quantified result, specific scope, concrete outcome
+- `dimension_code`: which analysis dimension this rewrite addresses (e.g., "bullet_quality_ownership", "impact_so_what", "professional_summary", "keyword_density", "grammar_spelling_consistency", "fluff_buzzwords")
+- `action_type`: "replace" for text swaps, "insert" for new content additions, "delete" for fluff removal
 
 ## OVERALL VERDICT
 - **Top 10%**: 14–17 dims Great/Good, no Bad, legal status crystal clear, strong specialty narrative.
