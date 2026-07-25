@@ -70,7 +70,7 @@ function LandingPage({ onSubmit, onError }) {
     document.getElementById('site-footer')?.scrollIntoView({ behavior: 'smooth' })
   }
 
-  const cvCount = stats ? (stats.total_candidates || 0) + 50 : '1,200+'
+  const cvCount = stats ? (stats.total_candidates || 0) + 50 : '60+'
   const formattedCvCount = typeof cvCount === 'number' ? cvCount.toLocaleString() + '+' : cvCount
 
   return (
@@ -182,10 +182,10 @@ function LandingPage({ onSubmit, onError }) {
         <div className="landing-screenshot-wrap">
           <div className="landing-screenshot-frame">
             <div className="landing-screenshot-chatbar">
-              <div className="landing-quote-avatar">RM</div>
+              <div className="landing-quote-avatar">SM</div>
               <div>
-                <div className="landing-screenshot-name">Dr. R. Moradi</div>
-                <div className="landing-screenshot-sub">Med-AI Summit · Telegram group</div>
+                <div className="landing-screenshot-name">Dr. S.M.</div>
+                <div className="landing-screenshot-sub">Telegram group</div>
               </div>
             </div>
             <div className="landing-screenshot-body">
@@ -195,7 +195,7 @@ function LandingPage({ onSubmit, onError }) {
               </div>
             </div>
           </div>
-          <div className="landing-screenshot-caption">Shared by a physician in the Med-AI Summit community</div>
+          <div className="landing-screenshot-caption">Shared by a Hiros user in our Telegram group</div>
         </div>
       </div>
 
@@ -208,12 +208,12 @@ function LandingPage({ onSubmit, onError }) {
           <div className="landing-tip-card">
             <div className="landing-tip-number">1</div>
             <h4>Photo &amp; formatting norms</h4>
-            <p>German CVs (Lebenslauf) traditionally include a professional photo and follow a tabular, reverse-chronological layout — different from US/UK conventions.</p>
+            <p>Photo conventions vary sharply by region — many European employers expect a professional photo and a tabular, reverse-chronological layout, while US/Canada resumes conventionally omit photos and personal details entirely (often for anti-discrimination reasons). Match the convention of where you’re applying, not where you’re from.</p>
           </div>
           <div className="landing-tip-card">
             <div className="landing-tip-number">2</div>
-            <h4>Approbation status</h4>
-            <p>Recruiters look for your license recognition status immediately. Ambiguity here is one of the most common reasons applications stall.</p>
+            <h4>LICENSE &amp; CREDENTIAL STATUS</h4>
+            <p>If your field requires a professional license or certification, recruiters look for your status immediately. Ambiguity here is one of the most common reasons applications stall.</p>
           </div>
           <div className="landing-tip-card">
             <div className="landing-tip-number">3</div>
