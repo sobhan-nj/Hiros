@@ -118,6 +118,9 @@
   cursor: pointer;
   transition: border-color 0.15s, background 0.15s, transform 0.15s;
   font-family: inherit;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
 }
 
 .option-card:hover {

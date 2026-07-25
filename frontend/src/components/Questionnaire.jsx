@@ -29,10 +29,10 @@ const STEPS = [
     subtitle: 'Where are you looking for a job?',
     gridClass: 'cols-4',
     options: [
-      { value: 'germany', label: 'Germany', desc: 'Analysis includes country-specific rules and norms' },
-      { value: 'us', label: 'United States', desc: 'General international resume analysis' },
-      { value: 'canada', label: 'Canada', desc: 'General international resume analysis' },
-      { value: 'other', label: 'Other', desc: 'General international resume analysis' },
+      { value: 'germany', label: 'Germany' },
+      { value: 'us', label: 'United States' },
+      { value: 'canada', label: 'Canada' },
+      { value: 'other', label: 'Other' },
     ],
   },
   {
