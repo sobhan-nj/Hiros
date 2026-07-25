@@ -39,3 +39,18 @@ Thumbs.db
 # IDE
 .vscode/
 .idea/
+
+# MiMoCode agent state
+.mimocode/
+
+# Utility scripts (one-off, not needed in repo)
+check_*.py
+check_*.ps1
+fix_*.py
+test_*.py
+verify_*.ps1
+deploy.ps1
+
+# SQLite WAL files
+*.db-shm
+*.db-wal
