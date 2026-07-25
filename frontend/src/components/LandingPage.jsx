@@ -1,4 +1,4 @@
-﻿import React, { useState, useRef, useEffect } from 'react'
+import React, { useState, useRef, useEffect } from 'react'
 import '../styles/landing.css'
 import { getStats } from '../api/client.js'
 
@@ -227,7 +227,7 @@ function LandingPage({ onSubmit, onError }) {
         <div className="landing-footer-inner">
           <div className="landing-footer-about">
             <h5>About Hiros</h5>
-            <p>Hiros is an AI-powered CV analysis tool built for physicians pursuing careers abroad. Built by a founder and medical student who's navigated this process personally — and it's growing into a place where physicians share what actually worked for them.</p>
+            <p>Hiros is an AI-powered resume analysis tool built on a simple idea: the resume that gets you hired is the one that actually shows the best of you according to the job's needs. It catches the layout issues, red flags, and missed opportunities that get in the way — so nothing gets lost between who you are, what's on the page, and what they're looking for.</p>
             <div className="landing-footer-cta">
               <span className="landing-footer-cta-label">Got a tip or a story from your own move?</span>
               <a href="/vblog" className="landing-footer-cta-link">Share your experience in our blog →</a>
