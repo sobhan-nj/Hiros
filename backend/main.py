@@ -531,6 +531,7 @@ def _verify_admin_key(x_admin_key: str = Header(None)):
 @app.get("/admin/stats")
 @limiter.limit("30/minute")
 async def get_stats(
+    request: Request,
     admin_key: str = Depends(_verify_admin_key),
     session: AsyncSession = Depends(get_session),
 ):
@@ -589,6 +590,7 @@ async def get_stats(
 @app.get("/admin/candidates")
 @limiter.limit("30/minute")
 async def list_candidates(
+    request: Request,
     admin_key: str = Depends(_verify_admin_key),
     session: AsyncSession = Depends(get_session),
     limit: int = 50,
@@ -620,6 +622,7 @@ async def list_candidates(
 @app.get("/admin/candidates/{candidate_id}")
 @limiter.limit("30/minute")
 async def get_candidate(
+    request: Request,
     candidate_id: int,
     admin_key: str = Depends(_verify_admin_key),
     session: AsyncSession = Depends(get_session),
@@ -657,6 +660,7 @@ async def get_candidate(
 @app.get("/cv/{candidate_id}/download/md")
 @limiter.limit("10/minute")
 async def download_cv_markdown(
+    request: Request,
     candidate_id: int,
     admin_key: str = Depends(_verify_admin_key),
     session: AsyncSession = Depends(get_session),
@@ -680,6 +684,7 @@ async def download_cv_markdown(
 @app.get("/cv/{candidate_id}/download/tex")
 @limiter.limit("10/minute")
 async def download_cv_latex(
+    request: Request,
     candidate_id: int,
     admin_key: str = Depends(_verify_admin_key),
     session: AsyncSession = Depends(get_session),
@@ -873,6 +878,7 @@ $content
 @app.get("/cv/{candidate_id}/download/html")
 @limiter.limit("10/minute")
 async def download_cv_html(
+    request: Request,
     candidate_id: int,
     admin_key: str = Depends(_verify_admin_key),
     session: AsyncSession = Depends(get_session),
