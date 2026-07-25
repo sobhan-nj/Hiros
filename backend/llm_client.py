@@ -92,7 +92,8 @@ async def _call_gemini(system_prompt: str, user_message: str, max_tokens: int) -
             user_message,
             generation_config=genai.types.GenerationConfig(
                 max_output_tokens=max_tokens,
-                temperature=0.2,
+                temperature=0,
+                top_p=1,
             ),
         )
         return response.text or ""
@@ -190,7 +191,7 @@ async def _call_openai_compatible(system_prompt: str, user_message: str, max_tok
                 {"role": "user", "content": user_message},
             ],
             max_tokens=max_tokens,
-            temperature=0.2,
+            temperature=0,
         )
         return response.choices[0].message.content or ""
 
@@ -225,7 +226,7 @@ async def _call_openai_structured(system_prompt: str, user_message: str, respons
                     ],
                     response_format=response_model,
                     max_tokens=max_tokens,
-                    temperature=0.2,
+                    temperature=0,
                 )
                 parsed = completion.choices[0].message.parsed
                 if parsed is not None:
@@ -256,7 +257,7 @@ async def _call_openai_with_json_fallback(client, system_prompt: str, user_messa
                 {"role": "user", "content": user_message},
             ],
             max_tokens=max_tokens,
-            temperature=0.2,
+            temperature=0,
         )
         return completion.choices[0].message.content or ""
 
