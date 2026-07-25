@@ -286,35 +286,42 @@ async def analyze(
 
     full_name = _extract_name_from_report(report_dict, resume_text, resume_filename)
 
-    now = datetime.now(timezone.utc)
-    folder_path = safe_save_to_folder(
-        resume_markdown, full_name, seniority, created_at=now
-    )
+    entry_id = None
+    if not getattr(report, 'parse_error', False):
+        now = datetime.now(timezone.utc)
+        folder_path = safe_save_to_folder(
+            resume_markdown, full_name, seniority, created_at=now
+        )
 
-    entry = TalentPoolEntry(
-        full_name=full_name,
-        seniority_declared=seniority,
-        seniority_detected=report.seniority_check.detected_level,
-        seniority_match=report.seniority_check.status,
-        tier=report.tier,
-        original_filename=resume_filename,
-        folder_path=folder_path,
-        resume_text=resume_text,
-        resume_markdown=resume_markdown,
-        analysis_json=json.dumps(report_dict),
-        priority_fixes_json=json.dumps(report.priority_fixes),
-        verdict=report.verdict,
-        target_country=target_country,
-        referral_source=referral_source or None,
-    )
-    session.add(entry)
-    await session.commit()
-    await session.refresh(entry)
-
-    logger.info(f"Saved candidate #{entry.id}: {full_name} ({seniority})")
+        try:
+            entry = TalentPoolEntry(
+                full_name=full_name,
+                seniority_declared=seniority,
+                seniority_detected=report.seniority_check.detected_level,
+                seniority_match=report.seniority_check.status,
+                tier=report.tier,
+                original_filename=resume_filename,
+                folder_path=folder_path,
+                resume_text=resume_text,
+                resume_markdown=resume_markdown,
+                analysis_json=json.dumps(report_dict),
+                priority_fixes_json=json.dumps(report.priority_fixes),
+                verdict=report.verdict,
+                target_country=target_country,
+                referral_source=referral_source or None,
+            )
+            session.add(entry)
+            await session.commit()
+            await session.refresh(entry)
+            entry_id = entry.id
+            logger.info(f"Saved candidate #{entry.id}: {full_name} ({seniority})")
+        except Exception as e:
+            logger.error(f"Failed to save candidate to DB: {e}")
+    else:
+        logger.warning(f"Analysis had errors (parse_error=True), skipping DB save for {resume_filename}")
 
     return JSONResponse(content={
-        "id": entry.id,
+        "id": entry_id,
         "analysis": report_dict,
     })
 
@@ -457,34 +464,41 @@ async def analyze_stream(
 
         full_name = _extract_name_from_report(report_dict, resume_text, resume_filename)
 
-        now = datetime.now(timezone.utc)
-        folder_path = safe_save_to_folder(
-            resume_markdown, full_name, seniority, created_at=now
-        )
+        entry_id = None
+        if not getattr(report, 'parse_error', False):
+            now = datetime.now(timezone.utc)
+            folder_path = safe_save_to_folder(
+                resume_markdown, full_name, seniority, created_at=now
+            )
 
-        entry = TalentPoolEntry(
-            full_name=full_name,
-            seniority_declared=seniority,
-            seniority_detected=report.seniority_check.detected_level,
-            seniority_match=report.seniority_check.status,
-            tier=report.tier,
-            original_filename=resume_filename,
-            folder_path=folder_path,
-            resume_text=resume_text,
-            resume_markdown=resume_markdown,
-            analysis_json=json.dumps(report_dict),
-            priority_fixes_json=json.dumps(report.priority_fixes),
-            verdict=report.verdict,
-            target_country=target_country,
-            referral_source=referral_source or None,
-        )
-        session.add(entry)
-        await session.commit()
-        await session.refresh(entry)
+            try:
+                entry = TalentPoolEntry(
+                    full_name=full_name,
+                    seniority_declared=seniority,
+                    seniority_detected=report.seniority_check.detected_level,
+                    seniority_match=report.seniority_check.status,
+                    tier=report.tier,
+                    original_filename=resume_filename,
+                    folder_path=folder_path,
+                    resume_text=resume_text,
+                    resume_markdown=resume_markdown,
+                    analysis_json=json.dumps(report_dict),
+                    priority_fixes_json=json.dumps(report.priority_fixes),
+                    verdict=report.verdict,
+                    target_country=target_country,
+                    referral_source=referral_source or None,
+                )
+                session.add(entry)
+                await session.commit()
+                await session.refresh(entry)
+                entry_id = entry.id
+                logger.info(f"Saved candidate #{entry.id}: {full_name} ({seniority})")
+            except Exception as e:
+                logger.error(f"Failed to save candidate to DB: {e}")
+        else:
+            logger.warning(f"Analysis had errors (parse_error=True), skipping DB save for {resume_filename}")
 
-        logger.info(f"Saved candidate #{entry.id}: {full_name} ({seniority})")
-
-        result_data = json.dumps({"id": entry.id, "analysis": report_dict})
+        result_data = json.dumps({"id": entry_id, "analysis": report_dict})
         yield f"event: result\ndata: {result_data}\n\n"
 
     return StreamingResponse(
