@@ -539,6 +539,31 @@
 
 .toolbar-btn-ghost:hover { border-color: var(--ink-500); }
 
+/* Split button for Apply Changes */
+.apply-split-btn {
+  display: flex;
+}
+
+.apply-split-btn .toolbar-btn:first-child {
+  border-radius: 9px 0 0 9px;
+}
+
+.apply-split-btn .toolbar-btn-dropdown {
+  background: var(--teal-600);
+  color: white;
+  border: none;
+  border-left: 1px solid rgba(255,255,255,0.25);
+  border-radius: 0 9px 9px 0;
+  padding: 8px 10px;
+  font-size: 11px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.apply-split-btn .toolbar-btn-dropdown:hover {
+  background: #226463;
+}
+
 /* Apply Changes Drawer */
 .changes-drawer {
   background: white;

@@ -24,7 +24,7 @@ function normalizeText(text) {
   return text
     .replace(/[\u200B\u200C\u200D\uFEFF]/g, '')
     .replace(/\u00A0/g, ' ')
-    .replace(/[–—-]/g, '-')
+    .replace(/[–—]/g, '-')
     .replace(/\s+/g, ' ')
     .trim()
 }
@@ -32,69 +32,84 @@ function normalizeText(text) {
 function findBestMatch(markdown, original) {
   if (!markdown || !original) return null
 
+  // Tier 1: Exact match
+  const exactIdx = markdown.indexOf(original)
+  if (exactIdx !== -1) {
+    return { index: exactIdx, length: original.length, text: original, type: 'exact' }
+  }
+
+  // Tier 2: Normalized match — find first and last significant words in original markdown
   const normMd = normalizeText(markdown)
   const normOrig = normalizeText(original)
-
-  const exactIdx = markdown.indexOf(original)
-  if (exactIdx !== -1) return { index: exactIdx, length: original.length, text: original }
-
-  const normIdx = normMd.indexOf(normOrig)
-  if (normIdx !== -1) {
-    const firstWord = normOrig.split(/\s+/).find(w => w.length > 2)
-    if (firstWord) {
-      const searchStart = Math.max(0, normIdx - 20)
-      const searchEnd = Math.min(markdown.length, normIdx + normOrig.length + 20)
-      const window = markdown.substring(searchStart, searchEnd)
-      const wordIdx = window.indexOf(firstWord)
-      if (wordIdx !== -1) {
-        const absStart = searchStart + wordIdx
-        const words = normOrig.split(/\s+/)
-        const lastWord = words.reverse().find(w => w.length > 2)
-        if (lastWord) {
-          const endWindow = markdown.substring(absStart, absStart + normOrig.length + 40)
-          const lastWordIdx = endWindow.lastIndexOf(lastWord)
-          if (lastWordIdx !== -1) {
-            const absEnd = absStart + lastWordIdx + lastWord.length
-            return { index: absStart, length: absEnd - absStart, text: markdown.substring(absStart, absEnd), normalized: true }
+  if (normMd.indexOf(normOrig) === -1) {
+    // Normalized text not found, skip to Tier 3
+  } else {
+    const words = normOrig.split(/\s+/).filter(w => w.length > 1)
+    if (words.length >= 2) {
+      const firstWord = words[0]
+      const lastWord = words[words.length - 1]
+      const fwRegex = new RegExp('\\b' + firstWord.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b', 'i')
+      const lwRegex = new RegExp('\\b' + lastWord.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b', 'i')
+      const fwMatch = fwRegex.exec(markdown)
+      if (fwMatch) {
+        const startIdx = fwMatch.index
+        const lwMatch = lwRegex.exec(markdown.substring(startIdx))
+        if (lwMatch) {
+          const endIdx = startIdx + lwMatch.index + lwMatch[0].length
+          const extracted = markdown.substring(startIdx, endIdx)
+          if (normalizeText(extracted) === normOrig) {
+            return { index: startIdx, length: endIdx - startIdx, text: extracted, type: 'normalized' }
           }
         }
-        return { index: absStart, length: normOrig.length, text: markdown.substring(absStart, absStart + normOrig.length), normalized: true }
+      }
+    } else if (words.length === 1) {
+      const wRegex = new RegExp('\\b' + words[0].replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b', 'i')
+      const wMatch = wRegex.exec(markdown)
+      if (wMatch) {
+        return { index: wMatch.index, length: wMatch[0].length, text: wMatch[0], type: 'normalized' }
       }
     }
   }
 
-  const origWords = normOrig.split(/\s+/).filter(w => w.length > 2)
+  // Tier 3: Fuzzy word match — search for word sequences in original markdown directly
+  const origWords = normOrig.split(/\s+/).filter(w => w.length > 1)
   if (origWords.length < 2) return null
 
-  for (let len = origWords.length; len >= Math.min(3, origWords.length); len--) {
-    for (let start = 0; start <= origWords.length - len; start++) {
-      const chunk = origWords.slice(start, start + len).join(' ')
-      const chunkIdx = normMd.indexOf(chunk)
-      if (chunkIdx !== -1) {
-        let endIdx = chunkIdx + chunk.length
-        for (const w of origWords.slice(start + len)) {
-          const nextIdx = normMd.indexOf(w, endIdx)
-          if (nextIdx !== -1 && nextIdx - endIdx < 15) endIdx = nextIdx + w.length
-          else break
+  for (let seqLen = Math.min(origWords.length, 6); seqLen >= 2; seqLen--) {
+    for (let start = 0; start <= origWords.length - seqLen; start++) {
+      const seq = origWords.slice(start, start + seqLen)
+      const firstWord = seq[0]
+
+      // Find the first word in the markdown
+      const wordRegex = new RegExp('\\b' + firstWord.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b', 'i')
+      const firstMatch = wordRegex.exec(markdown)
+      if (!firstMatch) continue
+
+      const matchStart = firstMatch.index
+
+      // Verify all subsequent words appear in order, reasonably close
+      let cursor = matchStart + firstMatch[0].length
+      let allFound = true
+      for (let w = 1; w < seq.length; w++) {
+        const wRegex = new RegExp('\\b' + seq[w].replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b', 'i')
+        const wMatch = wRegex.exec(markdown.substring(cursor, cursor + 200))
+        if (wMatch) {
+          cursor += wMatch.index + wMatch[0].length
+        } else {
+          allFound = false
+          break
         }
-        let startIdx = chunkIdx
-        for (const w of origWords.slice(0, start).reverse()) {
-          const prevIdx = normMd.lastIndexOf(w, startIdx)
-          if (prevIdx !== -1 && startIdx - prevIdx < 15) startIdx = prevIdx
-          else break
-        }
-        const matchedNorm = normMd.substring(startIdx, endIdx)
-        const firstWord = matchedNorm.split(/\s+/).find(w => w.length > 2)
-        if (firstWord) {
-          const searchStart = Math.max(0, startIdx - 10)
-          const searchEnd = Math.min(markdown.length, endIdx + 10)
-          const window = markdown.substring(searchStart, searchEnd)
-          const wordIdx = window.indexOf(firstWord)
-          if (wordIdx !== -1) {
-            const absStart = searchStart + wordIdx
-            const estEnd = Math.min(markdown.length, absStart + matchedNorm.length + 20)
-            return { index: absStart, length: estEnd - absStart, text: markdown.substring(absStart, estEnd), partial: true }
-          }
+      }
+
+      if (allFound) {
+        // Now find the actual boundaries of the matched region
+        const lastWord = seq[seq.length - 1]
+        const lastRegex = new RegExp('\\b' + lastWord.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b', 'i')
+        const lastMatch = lastRegex.exec(markdown.substring(matchStart))
+        if (lastMatch) {
+          const matchEnd = matchStart + lastMatch.index + lastMatch[0].length
+          const text = markdown.substring(matchStart, matchEnd)
+          return { index: matchStart, length: text.length, text, type: 'fuzzy' }
         }
       }
     }
@@ -152,6 +167,12 @@ function FullResults({ results, onBackToSummary, onReset }) {
     toastTimerRef.current = setTimeout(() => setToast(null), 5000)
   }, [])
 
+  const isApplicable = useCallback((r, i) => {
+    if (r.dimension_code && !TEXT_EDITABLE_DIMENSIONS.has(r.dimension_code)) return false
+    if (!matchCache[i]) return false
+    return true
+  }, [matchCache])
+
   const handleToggle = (index) => {
     setSelectedIndices(prev => {
       const next = new Set(prev)
@@ -164,8 +185,7 @@ function FullResults({ results, onBackToSummary, onReset }) {
   const handleSelectAll = () => {
     const all = new Set()
     rewrites?.forEach((r, i) => {
-      if (r.dimension_code && !TEXT_EDITABLE_DIMENSIONS.has(r.dimension_code)) return
-      if (!matchCache[i]) return
+      if (!isApplicable(r, i)) return
       all.add(i)
     })
     setSelectedIndices(all)
@@ -173,36 +193,23 @@ function FullResults({ results, onBackToSummary, onReset }) {
 
   const handleDeselectAll = () => setSelectedIndices(new Set())
 
-  const handleApply = () => {
-    const selected = rewrites?.filter((r, i) => {
-      if (!selectedIndices.has(i)) return false
-      if (r.dimension_code && !TEXT_EDITABLE_DIMENSIONS.has(r.dimension_code)) return false
-      if (!matchCache[i]) return false
-      return true
-    }).map(r => {
-      const i = rewrites.indexOf(r)
-      return { ...r, matchInfo: matchCache[i] }
-    }) || []
-
-    if (selected.length === 0) {
-      showToast('No changes selected.', 'info')
+  const applyRewrites = useCallback((rewritesToApply) => {
+    if (!rewritesToApply.length) {
+      showToast('No changes could be applied.', 'info')
       return
     }
+
+    // Sort by position descending so replacements don't shift indices
+    const sorted = rewritesToApply
+      .sort((a, b) => b.match.index - a.match.index)
 
     let currentMd = markdownSource
     let applied = 0
 
-    const sorted = selected
-      .map(r => {
-        const matchText = r.matchInfo?.text || r.original
-        return { ...r, matchText, index: currentMd.indexOf(matchText) }
-      })
-      .filter(r => r.index !== -1)
-      .sort((a, b) => b.index - a.index)
-
-    for (const rewrite of sorted) {
-      if (currentMd.includes(rewrite.matchText)) {
-        currentMd = currentMd.replace(rewrite.matchText, rewrite.rewritten)
+    for (const { match, rewritten } of sorted) {
+      const target = currentMd.substring(match.index, match.index + match.length)
+      if (target === match.text) {
+        currentMd = currentMd.substring(0, match.index) + rewritten + currentMd.substring(match.index + match.length)
         applied++
       }
     }
@@ -213,9 +220,23 @@ function FullResults({ results, onBackToSummary, onReset }) {
     } else {
       showToast('No changes could be applied.', 'info')
     }
+  }, [markdownSource, showToast])
 
+  const handleApplyAll = useCallback(() => {
+    const applicable = rewrites
+      ?.map((r, i) => ({ ...r, match: findBestMatch(markdownSource, r.original), _idx: i }))
+      .filter(r => isApplicable(r, r._idx) && r.match) || []
+    applyRewrites(applicable)
     setShowDrawer(false)
-  }
+  }, [rewrites, markdownSource, isApplicable, applyRewrites])
+
+  const handleApply = useCallback(() => {
+    const selected = rewrites
+      ?.map((r, i) => ({ ...r, match: findBestMatch(markdownSource, r.original), _idx: i }))
+      .filter(r => selectedIndices.has(r._idx) && isApplicable(r, r._idx) && r.match) || []
+    applyRewrites(selected)
+    setShowDrawer(false)
+  }, [rewrites, markdownSource, selectedIndices, isApplicable, applyRewrites])
 
   const handleDownload = (format) => {
     if (format === 'md') {
@@ -273,12 +294,21 @@ function FullResults({ results, onBackToSummary, onReset }) {
             <span className="resume-filename">{resumeFilename || 'Resume'}</span>
             <div className="toolbar-actions">
               {rewrites && rewrites.length > 0 && (
-                <button
-                  className="toolbar-btn toolbar-btn-primary"
-                  onClick={() => setShowDrawer(!showDrawer)}
-                >
-                  Apply Changes
-                </button>
+                <div className="apply-split-btn">
+                  <button
+                    className="toolbar-btn toolbar-btn-primary"
+                    onClick={handleApplyAll}
+                  >
+                    Apply Changes
+                  </button>
+                  <button
+                    className="toolbar-btn toolbar-btn-dropdown"
+                    onClick={() => setShowDrawer(!showDrawer)}
+                    title="Review changes before applying"
+                  >
+                    ▾
+                  </button>
+                </div>
               )}
               <button className="toolbar-btn toolbar-btn-ghost">
                 Edit
@@ -295,7 +325,7 @@ function FullResults({ results, onBackToSummary, onReset }) {
             <div className="changes-drawer">
               <div className="changes-drawer-head">
                 <span className="changes-drawer-title">
-                  Apply Changes <span className="count">{applicableCount} of {rewrites.length} applicable</span>
+                  Review & Select Changes <span className="count">{applicableCount} of {rewrites.length} applicable</span>
                 </span>
                 <div className="changes-drawer-actions">
                   <button onClick={handleSelectAll}>Select All</button>
@@ -312,7 +342,6 @@ function FullResults({ results, onBackToSummary, onReset }) {
                   groups[dim].push({ ...r, originalIndex: i })
                 })
                 return Object.entries(groups).map(([dimCode, items]) => {
-                  const isEditable = !dimCode || TEXT_EDITABLE_DIMENSIONS.has(dimCode)
                   return (
                     <div key={dimCode}>
                       <div className="change-group-label">
@@ -332,7 +361,8 @@ function FullResults({ results, onBackToSummary, onReset }) {
                               <div className="change-original">{item.original}</div>
                               <div className="change-rewritten">{item.rewritten}</div>
                               {!match && <div className="change-note">Original text not found in resume</div>}
-                              {match?.partial && <div className="change-note success">Partial match — will replace matched section</div>}
+                              {match?.type === 'normalized' && <div className="change-note success">Matched (whitespace-adjusted) — will replace</div>}
+                              {match?.type === 'fuzzy' && <div className="change-note success">Fuzzy match — will replace matched section</div>}
                             </div>
                           </div>
                         )
