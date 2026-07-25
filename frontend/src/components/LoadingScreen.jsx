@@ -69,7 +69,7 @@ function LoadingScreen({ analysisDone, onReady }) {
         setFactIndex(prev => (prev + 1) % FACTS.length)
         setFactFading(false)
       }, 300)
-    }, 3400)
+    }, 5400)
 
     return () => clearInterval(factTimerRef.current)
   }, [])
