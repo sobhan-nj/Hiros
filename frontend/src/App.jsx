@@ -2,7 +2,8 @@ import React, { useState, useEffect, useRef } from 'react'
 import LandingPage from './components/LandingPage.jsx'
 import VBlog from './components/VBlog.jsx'
 import Questionnaire from './components/Questionnaire.jsx'
-import SplitView from './components/SplitView.jsx'
+import ResultsSummary from './components/ResultsSummary.jsx'
+import FullResults from './components/FullResults.jsx'
 import AdminLogin from './components/AdminLogin.jsx'
 import AdminDashboard from './components/AdminDashboard.jsx'
 import LoadingScreen from './components/LoadingScreen.jsx'
@@ -98,8 +99,16 @@ function App() {
   }
 
   const handleLoadingReady = () => {
-    setScreen('results')
+    setScreen('results-summary')
     setError(null)
+  }
+
+  const handleSeeFullResults = () => {
+    setScreen('results-full')
+  }
+
+  const handleBackToSummary = () => {
+    setScreen('results-summary')
   }
 
   const handleReset = () => {
@@ -141,10 +150,12 @@ function App() {
     }
   }
 
-  const showHeader = screen === 'questionnaire' || screen === 'loading' || screen === 'results'
+  const showHeader = ['questionnaire', 'loading', 'results-summary', 'results-full'].includes(screen)
+
+  const isFullScreen = screen === 'results-full'
 
   return (
-    <div className="app">
+    <div className={`app${isFullScreen ? ' app-no-scroll' : ''}`}>
       {showHeader && (
         <nav className="landing-nav">
           <a href="/" className="landing-logo" onClick={(e) => { e.preventDefault(); handleReset() }}>
@@ -185,8 +196,20 @@ function App() {
           <LoadingScreen analysisDone={analysisDone} onReady={handleLoadingReady} />
         )}
 
-        {screen === 'results' && analysisResult && (
-          <SplitView results={analysisResult} onReset={handleReset} />
+        {screen === 'results-summary' && analysisResult && (
+          <ResultsSummary
+            results={analysisResult}
+            onReset={handleReset}
+            onSeeFull={handleSeeFullResults}
+          />
+        )}
+
+        {screen === 'results-full' && analysisResult && (
+          <FullResults
+            results={analysisResult}
+            onBackToSummary={handleBackToSummary}
+            onReset={handleReset}
+          />
         )}
 
         {screen === 'admin-login' && (
