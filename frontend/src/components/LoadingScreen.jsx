@@ -43,7 +43,16 @@ function LoadingScreen({ analysisDone, onReady }) {
   const timerRef = useRef(null)
   const factTimerRef = useRef(null)
   const onReadyRef = useRef(onReady)
+  const advanceTimersRef = useRef([])
   onReadyRef.current = onReady
+
+  // Clean up advance timers on unmount
+  useEffect(() => {
+    return () => {
+      advanceTimersRef.current.forEach(id => clearTimeout(id))
+      advanceTimersRef.current = []
+    }
+  }, [])
 
   // Normal animation - random 5-7s per step, last step waits for analysisDone
   useEffect(() => {
@@ -99,13 +108,16 @@ function LoadingScreen({ analysisDone, onReady }) {
       setPercentage(Math.round((step / LOADING_STEPS.length) * 100))
 
       if (step >= LOADING_STEPS.length) {
-        setTimeout(() => onReadyRef.current?.(), FAST_FORWARD_DURATION)
+        const id = setTimeout(() => onReadyRef.current?.(), FAST_FORWARD_DURATION)
+        advanceTimersRef.current.push(id)
       } else {
-        setTimeout(advance, stepDelay)
+        const id = setTimeout(advance, stepDelay)
+        advanceTimersRef.current.push(id)
       }
     }
 
-    setTimeout(advance, stepDelay)
+    const id = setTimeout(advance, stepDelay)
+    advanceTimersRef.current.push(id)
   }, [analysisDone, fastForwarded, currentStep])
 
   const displayStep = fastForwarded ? LOADING_STEPS.length : Math.min(currentStep, LOADING_STEPS.length)

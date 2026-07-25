@@ -1,4 +1,4 @@
-﻿import os
+import os
 from pathlib import Path
 from dotenv import load_dotenv
 from backend.utils.log import logger
@@ -20,14 +20,14 @@ AVALAI_BASE_URL = os.getenv("AVALAI_BASE_URL", "https://api.avalai.ir/v1")
 MIMO_API_KEY = os.getenv("MIMO_API_KEY", "")
 MIMO_BASE_URL = os.getenv("MIMO_BASE_URL", "https://api.xiaomimimo.com/v1")
 
-ADMIN_API_KEY = os.getenv("ADMIN_API_KEY", "dev-admin-key")
+ADMIN_API_KEY = os.getenv("ADMIN_API_KEY", "")
 ANALYSIS_API_KEY = os.getenv("ANALYSIS_API_KEY", "")
 
 _cors_raw = os.getenv("CORS_ALLOWED_ORIGINS", "")
 if _cors_raw.strip():
     CORS_ORIGINS = [o.strip() for o in _cors_raw.split(",") if o.strip()]
 elif IS_PRODUCTION:
-    CORS_ORIGINS = ["*"]
+    CORS_ORIGINS = []
 else:
     CORS_ORIGINS = [
         "http://localhost:5173",
@@ -53,11 +53,11 @@ TURNSTILE_SECRET_KEY = os.getenv("TURNSTILE_SECRET_KEY", "")
 
 _PROMPT_PATH = Path(__file__).parent / "system_prompt.txt"
 _TECH_PROMPT_PATH = Path(__file__).parent / "system_prompt_tech.txt"
-_cached_prompt: str | None = None
-_cached_tech_prompt: str | None = None
+_cached_prompt = None
+_cached_tech_prompt = None
 
 
-def load_system_prompt() -> str:
+def load_system_prompt():
     global _cached_prompt
     if _cached_prompt is None:
         try:
@@ -69,7 +69,7 @@ def load_system_prompt() -> str:
     return _cached_prompt
 
 
-def load_system_prompt_tech() -> str:
+def load_system_prompt_tech():
     global _cached_tech_prompt
     if _cached_tech_prompt is None:
         try:
@@ -79,21 +79,6 @@ def load_system_prompt_tech() -> str:
             logger.error(f"system_prompt_tech.txt not found at {_TECH_PROMPT_PATH}")
             _cached_tech_prompt = load_system_prompt()
     return _cached_tech_prompt
-
-
-def reload_system_prompt() -> str:
-    global _cached_prompt, _cached_tech_prompt
-    try:
-        _cached_prompt = _PROMPT_PATH.read_text(encoding="utf-8")
-        logger.info(f"System prompt reloaded ({len(_cached_prompt)} chars)")
-    except FileNotFoundError:
-        logger.error(f"system_prompt.txt not found at {_PROMPT_PATH}")
-    try:
-        _cached_tech_prompt = _TECH_PROMPT_PATH.read_text(encoding="utf-8")
-        logger.info(f"Tech system prompt reloaded ({len(_cached_tech_prompt)} chars)")
-    except FileNotFoundError:
-        logger.error(f"system_prompt_tech.txt not found at {_TECH_PROMPT_PATH}")
-    return _cached_prompt
 
 
 def validate_config():
@@ -110,8 +95,8 @@ def validate_config():
         errors.append("MIMO_API_KEY is not set")
     if IS_PRODUCTION and not CORS_ORIGINS:
         errors.append("CORS_ALLOWED_ORIGINS must be set in production")
-    if IS_PRODUCTION and ADMIN_API_KEY == "dev-admin-key":
-        errors.append("ADMIN_API_KEY must be changed in production")
+    if IS_PRODUCTION and not ADMIN_API_KEY:
+        errors.append("ADMIN_API_KEY must be set in production")
     if errors:
         for e in errors:
             logger.error(f"Config error: {e}")

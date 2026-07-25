@@ -22,13 +22,21 @@ async def _retry_with_backoff(func, *args, **kwargs):
             last_exception = e
             if attempt == MAX_RETRIES:
                 break
-            # Exponential backoff with jitter
             delay = min(BASE_DELAY * (2 ** attempt) + random.uniform(0, 1), MAX_DELAY)
             logger.warning(f"Attempt {attempt + 1}/{MAX_RETRIES + 1} failed: {e}. Retrying in {delay:.1f}s...")
             await asyncio.sleep(delay)
         except Exception as e:
-            # Don't retry on non-transient errors
-            raise
+            last_exception = e
+            # Retry on rate limit and service unavailable errors
+            error_str = str(e).lower()
+            if any(code in error_str for code in ('429', 'rate limit', '503', 'service unavailable')):
+                if attempt == MAX_RETRIES:
+                    break
+                delay = min(BASE_DELAY * (2 ** attempt) + random.uniform(0, 1), MAX_DELAY)
+                logger.warning(f"Attempt {attempt + 1}/{MAX_RETRIES + 1} rate limited: {e}. Retrying in {delay:.1f}s...")
+                await asyncio.sleep(delay)
+            else:
+                raise
     raise last_exception
 
 
@@ -72,10 +80,14 @@ async def _call_gemini(system_prompt: str, user_message: str, max_tokens: int) -
     async with _gemini_cache_lock:
         if _gemini_cached_content is None or getattr(_gemini_cached_content, 'expired', False):
             try:
-                _gemini_cached_content = genai.cached_content.create(
-                    model=config.LLM_MODEL,
-                    system_instruction=system_prompt,
-                    ttl="3600s",
+                loop = asyncio.get_event_loop()
+                _gemini_cached_content = await loop.run_in_executor(
+                    None,
+                    lambda: genai.cached_content.create(
+                        model=config.LLM_MODEL,
+                        system_instruction=system_prompt,
+                        ttl="3600s",
+                    ),
                 )
                 logger.info(f"Gemini prompt cached ({len(system_prompt)} chars, TTL 1h)")
             except Exception as e:
@@ -96,7 +108,11 @@ async def _call_gemini(system_prompt: str, user_message: str, max_tokens: int) -
                 top_p=1,
             ),
         )
-        return response.text or ""
+        try:
+            return response.text or ""
+        except (ValueError, AttributeError):
+            logger.warning("Gemini returned empty/filtered response")
+            return ""
 
     return await _retry_with_backoff(_make_request)
 

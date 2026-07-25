@@ -1,5 +1,5 @@
 from datetime import datetime, timezone
-from sqlalchemy import Column, String, Integer, DateTime, Text, text
+from sqlalchemy import Column, String, Integer, DateTime, Text, text, inspect
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 from sqlalchemy.orm import DeclarativeBase
 from backend.utils.log import logger
@@ -50,12 +50,9 @@ async def init_db():
             ("referral_source", "VARCHAR(100)"),
         ]:
             try:
-                # Check if column exists first (SQLite doesn't support IF NOT EXISTS for ADD COLUMN)
-                result = await conn.execute(text(
-                    f"SELECT COUNT(*) FROM pragma_table_info('talent_pool') WHERE name='{col}'"
-                ))
-                exists = result.scalar() > 0
-                if not exists:
+                insp = inspect(conn)
+                existing_cols = [c['name'] for c in insp.get_columns('talent_pool')]
+                if col not in existing_cols:
                     await conn.execute(text(
                         f"ALTER TABLE talent_pool ADD COLUMN {col} {typedef}"
                     ))
@@ -67,4 +64,8 @@ async def init_db():
 
 async def get_session():
     async with AsyncSessionLocal() as session:
-        yield session
+        try:
+            yield session
+        except Exception:
+            await session.rollback()
+            raise

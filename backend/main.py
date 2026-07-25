@@ -49,7 +49,10 @@ async def lifespan(app: FastAPI):
     logger.info("Resume Analyzer API shut down")
 
 
-app = FastAPI(title="Resume Analyzer API", version="0.1.0", lifespan=lifespan, docs_url="/api/docs", redoc_url="/api/redoc", openapi_url="/api/openapi.json")
+app = FastAPI(title="Resume Analyzer API", version="0.1.0", lifespan=lifespan,
+              docs_url=None if config.IS_PRODUCTION else "/api/docs",
+              redoc_url=None if config.IS_PRODUCTION else "/api/redoc",
+              openapi_url=None if config.IS_PRODUCTION else "/api/openapi.json")
 app.state.limiter = limiter
 
 app.add_middleware(SlowAPIMiddleware)
@@ -86,6 +89,7 @@ TURNSTILE_VERIFY_URL = "https://challenges.cloudflare.com/turnstile/v0/siteverif
 
 async def _verify_turnstile(token: str) -> bool:
     if not config.TURNSTILE_SECRET_KEY:
+        logger.warning("Turnstile verification disabled — TURNSTILE_SECRET_KEY not set")
         return True
     if not token:
         return False
@@ -158,7 +162,11 @@ async def parse_upload(
         raise HTTPException(status_code=413, detail="File too large. Maximum 10MB.")
 
     try:
-        resume_text, raw_keywords, mime_type, resume_markdown = parse_file(file_bytes, file.filename)
+        import asyncio
+        loop = asyncio.get_event_loop()
+        resume_text, raw_keywords, mime_type, resume_markdown = await loop.run_in_executor(
+            None, parse_file, file_bytes, file.filename
+        )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -365,7 +373,8 @@ async def analyze_stream(
     except (json.JSONDecodeError, TypeError):
         keywords_list = []
 
-    _active_workers += 1
+    async with _worker_lock:
+        _active_workers += 1
 
     async def event_stream():
         global _active_workers
@@ -379,7 +388,8 @@ async def analyze_stream(
             yield f"event: error\ndata: {json.dumps({'detail': 'LLM analysis failed. Please try again.'})}\n\n"
             return
         finally:
-            _active_workers -= 1
+            async with _worker_lock:
+                _active_workers -= 1
 
         yield f"event: step\ndata: {json.dumps({'step': 'report', 'message': 'Building your report...'})}\n\n"
 
@@ -519,6 +529,7 @@ def _verify_admin_key(x_admin_key: str = Header(None)):
 
 
 @app.get("/admin/stats")
+@limiter.limit("30/minute")
 async def get_stats(
     admin_key: str = Depends(_verify_admin_key),
     session: AsyncSession = Depends(get_session),
@@ -576,30 +587,38 @@ async def get_stats(
 
 
 @app.get("/admin/candidates")
+@limiter.limit("30/minute")
 async def list_candidates(
     admin_key: str = Depends(_verify_admin_key),
     session: AsyncSession = Depends(get_session),
+    limit: int = 50,
+    offset: int = 0,
 ):
     result = await session.execute(
-        select(TalentPoolEntry).order_by(TalentPoolEntry.created_at.desc())
+        select(
+            TalentPoolEntry.id, TalentPoolEntry.full_name,
+            TalentPoolEntry.seniority_declared, TalentPoolEntry.tier,
+            TalentPoolEntry.created_at
+        ).order_by(TalentPoolEntry.created_at.desc()).limit(limit).offset(offset)
     )
-    entries = result.scalars().all()
+    rows = result.all()
     return {
-        "count": len(entries),
+        "count": len(rows),
         "candidates": [
             {
-                "id": e.id,
-                "name": e.full_name,
-                "seniority": e.seniority_declared,
-                "tier": e.tier,
-                "created_at": e.created_at.isoformat() if e.created_at else None,
+                "id": r.id,
+                "name": r.full_name,
+                "seniority": r.seniority_declared,
+                "tier": r.tier,
+                "created_at": r.created_at.isoformat() if r.created_at else None,
             }
-            for e in entries
+            for r in rows
         ],
     }
 
 
 @app.get("/admin/candidates/{candidate_id}")
+@limiter.limit("30/minute")
 async def get_candidate(
     candidate_id: int,
     admin_key: str = Depends(_verify_admin_key),
@@ -636,6 +655,7 @@ async def get_candidate(
 
 
 @app.get("/cv/{candidate_id}/download/md")
+@limiter.limit("10/minute")
 async def download_cv_markdown(
     candidate_id: int,
     admin_key: str = Depends(_verify_admin_key),
@@ -658,8 +678,10 @@ async def download_cv_markdown(
 
 
 @app.get("/cv/{candidate_id}/download/tex")
+@limiter.limit("10/minute")
 async def download_cv_latex(
     candidate_id: int,
+    admin_key: str = Depends(_verify_admin_key),
     session: AsyncSession = Depends(get_session),
 ):
     result = await session.execute(
@@ -849,6 +871,7 @@ $content
 
 
 @app.get("/cv/{candidate_id}/download/html")
+@limiter.limit("10/minute")
 async def download_cv_html(
     candidate_id: int,
     admin_key: str = Depends(_verify_admin_key),

@@ -77,6 +77,8 @@ class DimensionResult(BaseModel):
     @field_validator("issues", "fixes", mode="before")
     @classmethod
     def coerce_to_list(cls, v):
+        if v is None:
+            return []
         if isinstance(v, str):
             return [v]
         return v
@@ -94,7 +96,7 @@ class DimensionResult(BaseModel):
             # Skip JSON-like fragments
             if re.search(r'(highlight_targets|"[^"]*":\s*[\[{]|\'[^\']*\':\s*[\[{])', f):
                 continue
-            if f.startswith('{') or f.startswith('[') or f.startswith('"'):
+            if f.startswith('{') or f.startswith('['):
                 continue
             if f.endswith('},') or f.endswith('}]') or f.endswith('",'):
                 continue
@@ -104,6 +106,8 @@ class DimensionResult(BaseModel):
     @field_validator("highlight_targets", mode="before")
     @classmethod
     def coerce_highlights(cls, v):
+        if v is None:
+            return []
         if isinstance(v, dict):
             return [v]
         return v

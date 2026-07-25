@@ -102,6 +102,9 @@ function Questionnaire({ onComplete, onStepAnswer, onSeeResults, answers, analyz
   }
 
   const handleSeeResults = () => {
+    const rawValue = localSelection ?? answers[current.key]
+    const mappedValue = mapValue(current.key, rawValue)
+    onStepAnswer(current.key, mappedValue)
     onSeeResults()
   }
 
